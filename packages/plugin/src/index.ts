@@ -15,6 +15,7 @@ export interface Config {
   readonly allowedUserIds: number[];
   readonly turnTimeoutMs: number;
   readonly progressEditIntervalMs: number;
+  readonly diagnosticLogging: boolean;
   readonly agentPreset?: string;
 }
 
@@ -23,6 +24,7 @@ export const Config: z<Config> = z.object({
   allowedUserIds: z.array(z.number()).required(),
   turnTimeoutMs: z.number().default(600000),
   progressEditIntervalMs: z.number().default(1000),
+  diagnosticLogging: z.boolean().default(false),
   agentPreset: z.string()
 });
 
@@ -31,8 +33,11 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   if (resolved === undefined) throw new Error(`Telegram Bot Token is not configured at ${config.tokenRef}`);
   const adapter = new DshAdapter(ctx, { turnTimeoutMs: config.turnTimeoutMs, agentPreset: config.agentPreset });
   const gateway = new TelegramGateway(adapter, { allowedUserIds: config.allowedUserIds });
-  const bot = createTelegramBot(resolved.value, gateway, { progressEditIntervalMs: config.progressEditIntervalMs });
   const logger = ctx.logger(name);
+  const bot = createTelegramBot(resolved.value, gateway, {
+    progressEditIntervalMs: config.progressEditIntervalMs,
+    ...(config.diagnosticLogging ? { onInbound: (metadata: unknown) => { logger.info("Telegram inbound", metadata); } } : {})
+  });
   try {
     await registerTelegramCommands(bot);
   } catch (error) {

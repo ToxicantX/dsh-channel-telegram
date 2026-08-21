@@ -5,12 +5,34 @@ import { ProgressMessageEditor, ProgressMessageUnavailableError } from "./progre
 
 const TELEGRAM_TEXT_LIMIT = 4096;
 
+export interface TelegramInboundMetadata {
+  readonly updateId: number;
+  readonly kind: "callback" | "text";
+  readonly userId?: number;
+  readonly chatId?: number;
+  readonly chatType?: string;
+}
+
 export interface TelegramBotOptions {
   readonly progressEditIntervalMs?: number;
+  readonly onInbound?: (metadata: TelegramInboundMetadata) => void;
 }
 
 export function createTelegramBot(token: string, gateway: TelegramGateway, options: TelegramBotOptions = {}): Bot {
   const bot = new Bot(token);
+
+  bot.use(async (ctx, next) => {
+    const callbackMessage = ctx.callbackQuery?.message;
+    const message = ctx.message;
+    options.onInbound?.({
+      updateId: ctx.update.update_id,
+      kind: ctx.callbackQuery === undefined ? "text" : "callback",
+      userId: ctx.from?.id,
+      chatId: callbackMessage?.chat.id ?? message?.chat.id,
+      chatType: callbackMessage?.chat.type ?? message?.chat.type
+    });
+    await next();
+  });
 
   bot.on("callback_query:data", async (ctx) => {
     const message = ctx.callbackQuery.message;

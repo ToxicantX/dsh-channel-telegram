@@ -43,10 +43,11 @@ function firstCallback(payload: Record<string, unknown>): string {
 describe("createTelegramBot", () => {
   it("answers callbacks, edits the menu, and finalizes one scoped progress message", async () => {
     const calls: ApiCall[] = [];
+    const inbound: unknown[] = [];
     let messageId = 100;
     const port = new FakePort();
     const gateway = new TelegramGateway(port, { allowedUserIds: [42] });
-    const bot = createTelegramBot("123456:fake-token", gateway, { progressEditIntervalMs: 250 });
+    const bot = createTelegramBot("123456:fake-token", gateway, { progressEditIntervalMs: 250, onInbound: (metadata) => { inbound.push(metadata); } });
     bot.api.config.use(async (_previous, method, payload) => {
       calls.push({ method, payload: payload as Record<string, unknown> });
       if (method === "getMe") return { ok: true, result: { id: 999, is_bot: true, first_name: "Bot", username: "test_bot" } } as never;
@@ -71,6 +72,12 @@ describe("createTelegramBot", () => {
     releaseComputerLookup();
     await openingComputers;
     expect(calls.slice(-2).map((call) => call.method)).toEqual(["answerCallbackQuery", "editMessageText"]);
+    expect(inbound.slice(0, 2)).toEqual([
+      { updateId: 1, kind: "text", userId: 42, chatId: 42, chatType: "private" },
+      { updateId: 2, kind: "callback", userId: 42, chatId: 42, chatType: "private" }
+    ]);
+    expect(inbound[0]).not.toHaveProperty("text");
+    expect(inbound[1]).not.toHaveProperty("data");
 
     let edit = calls.findLast((call) => call.method === "editMessageText")!;
     await bot.handleUpdate(callbackUpdate(3, firstCallback(edit.payload)));

@@ -10,6 +10,7 @@ Example composition row:
         allowedUserIds: [123456789]
         turnTimeoutMs: 600000
         progressEditIntervalMs: 1000
+        diagnosticLogging: false
 
 The token value is resolved through ctx.credentials. Never place the token in
 this configuration. Only one running plugin instance may own a Bot Token.
@@ -19,3 +20,7 @@ and session through inline buttons. The bot edits one progress message at the
 configured interval and finalizes it with the correlated turn result. Only text
 and tool names from the exact submitted DSH turn are surfaced; reasoning, tool
 arguments, and tool result bodies are not forwarded.
+
+Set diagnosticLogging to true only while troubleshooting inbound delivery. It
+logs update kind and numeric routing metadata, but never message text, callback
+data, credentials, project ids, or session ids.
