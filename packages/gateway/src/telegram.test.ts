@@ -56,7 +56,7 @@ describe("createTelegramBot", () => {
     });
     await bot.init();
 
-    await bot.handleUpdate(messageUpdate(1, "/menu"));
+    await bot.handleUpdate(messageUpdate(1, "/start"));
     const menuCall = calls.findLast((call) => call.method === "sendMessage")!;
     let releaseComputerLookup = () => undefined;
     port.computerGate = new Promise<void>((resolve) => { releaseComputerLookup = resolve; });

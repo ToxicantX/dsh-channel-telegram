@@ -55,6 +55,7 @@ export class TelegramGateway {
     const [rawCommand = "", ...args] = text.split(/\s+/u);
     const command = rawCommand.split("@", 1)[0]?.toLowerCase();
     switch (command) {
+      case "/start":
       case "/menu": return [await this.rootMenu(update.userId, update.chatId)];
       case "/computers": return [await this.computersMenu(update.userId, update.chatId, 0)];
       case "/projects": return [await this.projectsEntry(update.userId, update.chatId)];
@@ -63,7 +64,7 @@ export class TelegramGateway {
       case "/new": return [await this.create(update.userId)];
       case "/status": return [await this.rootMenu(update.userId, update.chatId)];
       case "/stop": return [await this.stop(update.userId)];
-      default: return ["Commands: /menu /computers /projects /sessions /use /new /status /stop"];
+      default: return ["Commands: /start /menu /computers /projects /sessions /use /new /status /stop"];
     }
   }
 
