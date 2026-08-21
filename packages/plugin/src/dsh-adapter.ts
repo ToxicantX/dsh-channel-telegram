@@ -11,6 +11,7 @@ import type { ComputerSummary, DshPort, ProjectSummary, SessionSummary, TurnProg
 
 export interface DshAdapterOptions {
   readonly turnTimeoutMs: number;
+  readonly hostName: string;
   readonly agentPreset?: string;
 }
 
@@ -77,7 +78,7 @@ export class DshAdapter implements DshPort {
   }
 
   async listComputers(): Promise<readonly ComputerSummary[]> {
-    return [{ id: "local", title: "Local DSH", status: "online" }];
+    return [{ id: "local", title: this.options.hostName, status: "online" }];
   }
 
   async listProjects(computerId: string): Promise<readonly ProjectSummary[]> {

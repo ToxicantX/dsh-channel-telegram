@@ -77,7 +77,8 @@ describe("DshAdapter.send", () => {
         return () => { disposed += 1; listener = undefined; };
       }
     } as unknown as Context;
-    const adapter = new DshAdapter(ctx, { turnTimeoutMs: 1000 });
+    const adapter = new DshAdapter(ctx, { turnTimeoutMs: 1000, hostName: "Build Host" });
+    await expect(adapter.listComputers()).resolves.toEqual([{ id: "local", title: "Build Host", status: "online" }]);
     const progress: string[] = [];
     const result = await adapter.send(targetSession.id, "hello", (event) => { progress.push(event.type); });
     expect(result).toEqual({ text: "target answer", reason: "completed", turn: 4 });
