@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ProgressMessageEditor, ProgressRenderer } from "./progress.js";
+import { ProgressMessageEditor, ProgressMessageUnavailableError, ProgressRenderer } from "./progress.js";
 
 const result = (text: string) => ({ text, reason: "completed", turn: 7 } as const);
 
@@ -52,6 +52,28 @@ describe("ProgressMessageEditor", () => {
     expect(edits.at(-1)).toContain("partial");
     await editor.update({ type: "turn-end", sessionId: "session-one", result: result("final") });
     expect(edits.at(-1)).toContain("final");
+  });
+
+  it("sends a replacement when the original progress message is unavailable", async () => {
+    const sent: string[] = [];
+    const editor = new ProgressMessageEditor({
+      send: async (text) => { sent.push(text); return { messageId: sent.length }; },
+      edit: async () => { throw new ProgressMessageUnavailableError("deleted"); }
+    });
+    await editor.update({ type: "queued", sessionId: "session-one" });
+    await editor.update({ type: "turn-end", sessionId: "session-one", result: result("replacement final") });
+    expect(sent).toHaveLength(2);
+    expect(sent[1]).toContain("replacement final");
+  });
+
+  it("does not hide non-recoverable Telegram edit errors", async () => {
+    const editor = new ProgressMessageEditor({
+      send: async () => ({ messageId: 1 }),
+      edit: async () => { throw new Error("Too Many Requests: retry after 3"); }
+    });
+    await editor.update({ type: "queued", sessionId: "session-one" });
+    await expect(editor.update({ type: "turn-end", sessionId: "session-one", result: result("final") }))
+      .rejects.toThrow("Too Many Requests");
   });
 
   it("sends continuation messages for final output over 4096 characters", async () => {

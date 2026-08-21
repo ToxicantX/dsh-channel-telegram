@@ -1,7 +1,7 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import type { GatewayReply, TelegramGateway } from "./gateway.js";
 import type { MenuView } from "./menu.js";
-import { ProgressMessageEditor } from "./progress.js";
+import { ProgressMessageEditor, ProgressMessageUnavailableError } from "./progress.js";
 
 const TELEGRAM_TEXT_LIMIT = 4096;
 
@@ -37,7 +37,9 @@ export function createTelegramBot(token: string, gateway: TelegramGateway, optio
         try {
           await ctx.api.editMessageText(ctx.chat.id, messageId, text);
         } catch (error) {
-          if (!isNotModified(error)) throw error;
+          if (isNotModified(error)) return;
+          if (isUnavailableEdit(error)) throw new ProgressMessageUnavailableError("Telegram progress message is unavailable", { cause: error });
+          throw error;
         }
       }
     }, { intervalMs: options.progressEditIntervalMs });
@@ -65,7 +67,9 @@ async function editMenu(ctx: Context, view: MenuView): Promise<void> {
   try {
     await ctx.editMessageText(view.text, { reply_markup: keyboard(view) });
   } catch (error) {
-    if (!isNotModified(error)) throw error;
+    if (isNotModified(error)) return;
+    if (!isUnavailableEdit(error)) throw error;
+    await ctx.reply(view.text, { reply_markup: keyboard(view) });
   }
 }
 
@@ -81,4 +85,10 @@ function keyboard(view: MenuView): InlineKeyboard {
 
 function isNotModified(error: unknown): boolean {
   return error instanceof Error && error.message.toLowerCase().includes("message is not modified");
+}
+
+function isUnavailableEdit(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const message = error.message.toLowerCase();
+  return message.includes("message to edit not found") || message.includes("message can't be edited");
 }

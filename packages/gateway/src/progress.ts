@@ -84,6 +84,13 @@ export class ProgressRenderer {
   }
 }
 
+export class ProgressMessageUnavailableError extends Error {
+  constructor(message: string, options?: ErrorOptions) {
+    super(message, options);
+    this.name = "ProgressMessageUnavailableError";
+  }
+}
+
 export interface ProgressMessageTransport {
   send(text: string): Promise<{ readonly messageId: number }>;
   edit(messageId: number, text: string): Promise<void>;
@@ -157,7 +164,15 @@ export class ProgressMessageEditor {
   private async enqueueText(text: string): Promise<void> {
     const messageId = this.messageId;
     if (messageId === undefined) return;
-    this.editTail = this.editTail.then(() => this.transport.edit(messageId, text)).catch(() => undefined);
+    this.editTail = this.editTail.then(async () => {
+      try {
+        await this.transport.edit(messageId, text);
+      } catch (error) {
+        if (!(error instanceof ProgressMessageUnavailableError)) throw error;
+        const replacement = await this.transport.send(text);
+        this.messageId = replacement.messageId;
+      }
+    });
     await this.editTail;
     this.lastEditAt = this.now();
   }
