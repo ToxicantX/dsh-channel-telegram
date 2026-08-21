@@ -2,7 +2,7 @@ import type { Update } from "grammy/types";
 import { describe, expect, it } from "vitest";
 import { TelegramGateway } from "./gateway.js";
 import type { DshPort, TurnProgressListener, TurnResult } from "./ports.js";
-import { createTelegramBot } from "./telegram.js";
+import { createTelegramBot, registerTelegramCommands } from "./telegram.js";
 
 class FakePort implements DshPort {
   computerGate?: Promise<void>;
@@ -50,11 +50,15 @@ describe("createTelegramBot", () => {
     bot.api.config.use(async (_previous, method, payload) => {
       calls.push({ method, payload: payload as Record<string, unknown> });
       if (method === "getMe") return { ok: true, result: { id: 999, is_bot: true, first_name: "Bot", username: "test_bot" } } as never;
-      if (method === "answerCallbackQuery") return { ok: true, result: true } as never;
+      if (method === "answerCallbackQuery" || method === "setMyCommands") return { ok: true, result: true } as never;
       const text = String((payload as { text?: string }).text ?? "");
       return { ok: true, result: { message_id: ++messageId, date: 1, chat, text } } as never;
     });
     await bot.init();
+    await registerTelegramCommands(bot);
+    const commandCall = calls.findLast((call) => call.method === "setMyCommands")!;
+    expect(commandCall.payload.scope).toEqual({ type: "all_private_chats" });
+    expect(commandCall.payload.commands).toEqual(expect.arrayContaining([expect.objectContaining({ command: "start" }), expect.objectContaining({ command: "sessions" })]));
 
     await bot.handleUpdate(messageUpdate(1, "/start"));
     const menuCall = calls.findLast((call) => call.method === "sendMessage")!;

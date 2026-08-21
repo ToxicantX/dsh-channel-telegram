@@ -55,6 +55,19 @@ export function createTelegramBot(token: string, gateway: TelegramGateway, optio
   return bot;
 }
 
+export async function registerTelegramCommands(bot: Bot): Promise<void> {
+  await bot.api.setMyCommands([
+    { command: "start", description: "Open computer, project, and session menu" },
+    { command: "menu", description: "Show the current target and selectors" },
+    { command: "computers", description: "Select a computer" },
+    { command: "projects", description: "Select a project" },
+    { command: "sessions", description: "Select a session" },
+    { command: "status", description: "Show the current target status" },
+    { command: "new", description: "Create a session in the selected project" },
+    { command: "stop", description: "Stop the current session turn" }
+  ], { scope: { type: "all_private_chats" } });
+}
+
 async function sendReply(ctx: Context, reply: GatewayReply): Promise<void> {
   if (typeof reply !== "string") {
     await ctx.reply(reply.text, { reply_markup: keyboard(reply) });
