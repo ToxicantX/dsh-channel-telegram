@@ -30,7 +30,7 @@ importers:
         specifier: 3.18.1
         version: 3.18.1
       '@wsxcant/dsh-channel-telegram-gateway':
-        specifier: workspace:*
+        specifier: 0.2.1
         version: link:../gateway
     devDependencies:
       '@deepseek-ai/cordis':
