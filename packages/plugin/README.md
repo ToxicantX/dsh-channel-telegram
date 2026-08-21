@@ -4,7 +4,7 @@ Cordis Host composition plugin for DSH versions from 0.1.0-rc.8 up to, but not i
 
 ## Install
 
-    dsh plugin --profile web add dsh-channel-telegram@0.2.2
+    dsh plugin --profile web add dsh-channel-telegram@0.2.3
 
 The DSH plugin manager installs the npm package and adds its bundled composition
 patch to the profile. Restart the active DSH Web Host, then configure Telegram
