@@ -1,10 +1,10 @@
 {
   "name": "dsh-channel-telegram",
-  "version": "0.2.3",
+  "version": "0.3.0",
   "publishConfig": { "access": "public" },
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/ToxicantX/dsh-channel-telegram.git", "directory": "packages/plugin" },
-  "description": "Single-poller Telegram Gateway Host plugin for DeepSeek Harness",
+  "description": "Telegram and QQ Official Bot Host plugin for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -34,7 +34,8 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.1",
-    "@wsxcant/dsh-channel-telegram-gateway": "0.2.1"
+    "@wsxcant/dsh-channel-qq": "0.1.0",
+    "@wsxcant/dsh-channel-telegram-gateway": "0.2.2"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",

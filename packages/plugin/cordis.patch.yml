@@ -4,5 +4,11 @@
       config:
         allowedUserIds: []
         hostName: Local DSH
+        turnTimeoutMs: 600000
+        progressEditIntervalMs: 1000
         diagnosticLogging: false
+        qqAppId: ""
+        qqAllowedOpenIds: []
+        qqProgressIntervalMs: 3000
+        qqOpenIdLookupEnabled: false
       disabled: false

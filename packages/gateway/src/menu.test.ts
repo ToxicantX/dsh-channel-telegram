@@ -11,6 +11,12 @@ describe("CallbackTokenStore", () => {
     expect(store.consume(data, 42, 10)).toBeUndefined();
   });
 
+  it("fails closed when a token generator repeats", () => {
+    const store = new CallbackTokenStore({ token: () => "same" });
+    store.issue("actor", "conversation", { type: "root" });
+    expect(() => store.issue("actor", "conversation", { type: "root" })).toThrow("unique token");
+  });
+
   it("expires callbacks and clamps pagination", () => {
     let now = 0;
     const store = new CallbackTokenStore({ ttlMs: 100, now: () => now, token: () => "opaque" });

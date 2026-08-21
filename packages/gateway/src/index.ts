@@ -1,3 +1,4 @@
+export * from "./control.js";
 export * from "./gateway.js";
 export * from "./menu.js";
 export * from "./ports.js";

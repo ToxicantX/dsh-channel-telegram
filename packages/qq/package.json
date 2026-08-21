@@ -1,0 +1,22 @@
+{
+  "name": "@wsxcant/dsh-channel-qq",
+  "version": "0.1.0",
+  "description": "QQ official Bot API v2 transport for DSH channel control",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": ["lib", "README.md"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/ToxicantX/dsh-channel-telegram.git", "directory": "packages/qq" },
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@wsxcant/dsh-channel-telegram-gateway": "0.2.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": { "@types/ws": "^8.18.1" }
+}

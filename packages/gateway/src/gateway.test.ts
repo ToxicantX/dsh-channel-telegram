@@ -295,4 +295,12 @@ describe("TelegramGateway", () => {
     await flush();
     expect(events).toEqual([]);
   });
+
+  it("keeps the private numeric allowlist after control disposal", async () => {
+    const gateway = new TelegramGateway(new FakePort(), { allowedUserIds: [42] });
+    expect(await gateway.handle(update(1, "/menu"))).toHaveLength(1);
+    gateway.dispose();
+    expect(await gateway.handle(update(2, "/menu"))).toEqual([]);
+    expect(await gateway.handleCallback(callback(3, "m:missing"))).toEqual({ answer: "This menu expired. Run /menu again." });
+  });
 });

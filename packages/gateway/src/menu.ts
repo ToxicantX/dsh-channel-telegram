@@ -22,8 +22,8 @@ export type MenuAction =
   | { readonly type: "create-session"; readonly computerId: string; readonly projectId: string; readonly presetId: string };
 
 interface TokenRecord {
-  readonly userId: number;
-  readonly chatId: number;
+  readonly actorId: string;
+  readonly conversationId: string;
   readonly action: MenuAction;
   readonly expiresAt: number;
 }
@@ -51,11 +51,18 @@ export class CallbackTokenStore {
     if (!Number.isSafeInteger(this.ttlMs) || this.ttlMs < 1) throw new Error("callback ttl must be positive");
   }
 
-  issue(userId: number, chatId: number, action: MenuAction): string {
+  issue(actorId: string | number, conversationId: string | number, action: MenuAction): string {
     this.prune();
-    let token = "";
-    do token = this.token(); while (token === "" || this.records.has(token));
-    this.records.set(token, { userId, chatId, action, expiresAt: this.now() + this.ttlMs });
+    let token: string | undefined;
+    for (let attempt = 0; attempt < 32; attempt += 1) {
+      const candidate = this.token();
+      if (candidate !== "" && !this.records.has(candidate)) {
+        token = candidate;
+        break;
+      }
+    }
+    if (token === undefined) throw new Error("callback token generator did not produce a unique token");
+    this.records.set(token, { actorId: String(actorId), conversationId: String(conversationId), action, expiresAt: this.now() + this.ttlMs });
     while (this.records.size > this.capacity) {
       const oldest = this.records.keys().next().value as string | undefined;
       if (oldest === undefined) break;
@@ -64,7 +71,7 @@ export class CallbackTokenStore {
     return "m:" + token;
   }
 
-  consume(data: string, userId: number, chatId: number): MenuAction | undefined {
+  consume(data: string, actorId: string | number, conversationId: string | number): MenuAction | undefined {
     if (!data.startsWith("m:")) return undefined;
     const token = data.slice(2);
     const record = this.records.get(token);
@@ -73,7 +80,7 @@ export class CallbackTokenStore {
       this.records.delete(token);
       return undefined;
     }
-    if (record.userId !== userId || record.chatId !== chatId) return undefined;
+    if (record.actorId !== String(actorId) || record.conversationId !== String(conversationId)) return undefined;
     this.records.delete(token);
     return record.action;
   }

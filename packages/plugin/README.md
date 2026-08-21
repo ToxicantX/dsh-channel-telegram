@@ -4,11 +4,11 @@ Cordis Host composition plugin for DSH versions from 0.1.0-rc.8 up to, but not i
 
 ## Install
 
-    dsh plugin --profile web add dsh-channel-telegram@0.2.3
+The QQ-enabled plugin is the 0.3.0 release line. Publish npm packages in dependency order: `@wsxcant/dsh-channel-telegram-gateway@0.2.2`, `@wsxcant/dsh-channel-qq@0.1.0`, then `dsh-channel-telegram@0.3.0`, before installing this package from the registry:
 
-The DSH plugin manager installs the npm package and adds its bundled composition
-patch to the profile. Restart the active DSH Web Host, then configure Telegram
-under Settings > Plugins.
+    dsh plugin --profile web add dsh-channel-telegram@0.3.0
+
+For source-checkout verification, link the profile dependency to this package and rebuild the workspace. The DSH plugin manager installs a published package and adds its bundled composition patch to the profile. Restart the active DSH Web Host, then configure Telegram and QQ under Settings > Plugins.
 
 Example composition row:
 
@@ -19,6 +19,10 @@ Example composition row:
         turnTimeoutMs: 600000
         progressEditIntervalMs: 1000
         diagnosticLogging: false
+        qqAppId: ""
+        qqAllowedOpenIds: []
+        qqProgressIntervalMs: 3000
+        qqOpenIdLookupEnabled: false
 
 ## Web settings
 
@@ -34,17 +38,47 @@ Open DSH Settings and select Plugins. The Telegram card manages:
   `local`.
 
 The composition values are defaults for host name and user IDs. Saved Web
-settings override those defaults and survive profile reload. Settings and
-credential updates serialize a poller restart. With no Bot Token or no allowed
-user ID, the plugin remains available for configuration but does not poll
-Telegram.
+settings override those defaults and survive profile reload. Credential and settings
+updates serialize a Telegram runtime restart. With no Bot
+Token or no allowed user ID, Telegram remains available for configuration but does not
+poll.
 
-Never place the Bot Token in composition configuration, repository files, logs,
-or normal settings. Only one running plugin instance may own a Bot Token.
+## QQ C2C
 
-Use /start or /menu in the private bot chat to select the computer, project,
-and session through inline buttons. `/new` opens the available Agent preset
+The QQ card manages a QQ Official Bot API v2 C2C channel. It stores AppID,
+allowed QQ user OpenIDs, and stage-message interval in the Host `qq` namespace.
+AppID is limited to 64 characters; OpenIDs are trimmed, deduplicated, and limited
+to 128 characters; the stage interval is an integer from 1000 to 60000 ms.
+The AppSecret is write-only DSH Credentials under `QQ_BOT_APP_SECRET`; its
+stored value is never returned to the browser. The QQ runtime does not start until
+AppID, AppSecret, and at least one allowed OpenID are present. A normal QQ number is
+not a user OpenID. To bootstrap the allowlist, temporarily enable `Allow /openid
+identity lookup`, send `/openid` in C2C, save the returned value as an allowed
+OpenID, and disable the lookup again. While enabled, only `/openid` replies before
+authorization; it never invokes DSH.
+
+QQ v1 is C2C only. It obtains and refreshes access tokens server-side, uses the
+official Gateway with the `GROUP_AND_C2C_EVENT` intent, resumes processed event
+sequences after reconnect, and de-duplicates C2C events by message ID plus
+message index. Text commands and numbered menus are always available; inline QQ
+keyboards are not required. The `C2C_MESSAGE_CREATE` OpenID must appear in the
+allowlist before any DSH action is performed. QQ C2C input uses `msg_type: 6`. Unlike
+Telegram, QQ does not continuously edit one progress message: current-stage progress
+is sent as separate text messages throttled by `qqProgressIntervalMs`, and the final
+result is sent as another message. This is an expected Telegram/QQ transport
+difference.
+
+Never place either bot secret in composition configuration, repository files, logs, or
+normal settings. Telegram uses `TELEGRAM_BOT_TOKEN`; QQ uses
+`QQ_BOT_APP_SECRET`. Only one running plugin instance may own the configured bot
+credentials.
+
+Use /start or /menu in Telegram, or send /start or /menu in QQ C2C, to select the computer, project,
+and session. Telegram uses inline buttons; QQ C2C uses the numbered menu shown in its reply. `/new` opens the available Agent preset
 menu and creates the session only after a preset is selected.
+
+Telegram and QQ runtimes restart independently when their settings or credential
+changes are saved, and both stop their subscriptions and transports on dispose.
 
 Once a session is selected, the bot relays that session's running turns even
 when they were started from the DSH GUI or another client. Switching computer,
@@ -53,8 +87,8 @@ message still uses exact message/turn correlation for its direct progress, while
 the selected-session relay is suppressed for that originating chat to avoid a
 duplicate. Other chats selecting the same session continue to receive it.
 
-The bot edits one progress message at the configured interval and finalizes it
-with the turn result. Only visible assistant text and tool names/status are
+The Telegram bot edits one progress message at the configured interval and finalizes it
+with the turn result. QQ uses the separate stage-message behavior described above. Only visible assistant text and tool names/status are
 forwarded; reasoning, tool arguments, tool result bodies, and internal error
 details are not forwarded.
 
