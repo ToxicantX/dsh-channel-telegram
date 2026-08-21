@@ -5,7 +5,11 @@ import type { DshPort, TurnProgressListener, TurnResult } from "./ports.js";
 import { createTelegramBot } from "./telegram.js";
 
 class FakePort implements DshPort {
-  async listComputers() { return [{ id: "local", title: "Local DSH", status: "online" }] as const; }
+  computerGate?: Promise<void>;
+  async listComputers() {
+    await this.computerGate;
+    return [{ id: "local", title: "Local DSH", status: "online" }] as const;
+  }
   async listProjects() { return [{ id: "p1", title: "Project", path: "C:/project", status: "online" }] as const; }
   async listSessions() { return [{ id: "s1", title: "Session", status: "idle" }] as const; }
   async createSession() { return { id: "s2", title: "New", status: "idle" } as const; }
@@ -40,7 +44,8 @@ describe("createTelegramBot", () => {
   it("answers callbacks, edits the menu, and finalizes one scoped progress message", async () => {
     const calls: ApiCall[] = [];
     let messageId = 100;
-    const gateway = new TelegramGateway(new FakePort(), { allowedUserIds: [42] });
+    const port = new FakePort();
+    const gateway = new TelegramGateway(port, { allowedUserIds: [42] });
     const bot = createTelegramBot("123456:fake-token", gateway, { progressEditIntervalMs: 250 });
     bot.api.config.use(async (_previous, method, payload) => {
       calls.push({ method, payload: payload as Record<string, unknown> });
@@ -52,8 +57,15 @@ describe("createTelegramBot", () => {
     await bot.init();
 
     await bot.handleUpdate(messageUpdate(1, "/menu"));
-    let menuCall = calls.findLast((call) => call.method === "sendMessage")!;
-    await bot.handleUpdate(callbackUpdate(2, firstCallback(menuCall.payload)));
+    const menuCall = calls.findLast((call) => call.method === "sendMessage")!;
+    let releaseComputerLookup = () => undefined;
+    port.computerGate = new Promise<void>((resolve) => { releaseComputerLookup = resolve; });
+    const openingComputers = bot.handleUpdate(callbackUpdate(2, firstCallback(menuCall.payload)));
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(calls.at(-1)?.method).toBe("answerCallbackQuery");
+    releaseComputerLookup();
+    await openingComputers;
     expect(calls.slice(-2).map((call) => call.method)).toEqual(["answerCallbackQuery", "editMessageText"]);
 
     let edit = calls.findLast((call) => call.method === "editMessageText")!;

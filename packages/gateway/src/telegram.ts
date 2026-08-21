@@ -18,6 +18,7 @@ export function createTelegramBot(token: string, gateway: TelegramGateway, optio
       await ctx.answerCallbackQuery({ text: "This menu is unavailable." });
       return;
     }
+    await ctx.answerCallbackQuery();
     const result = await gateway.handleCallback({
       updateId: ctx.update.update_id,
       chatId: message.chat.id,
@@ -25,8 +26,8 @@ export function createTelegramBot(token: string, gateway: TelegramGateway, optio
       userId: ctx.from.id,
       data: ctx.callbackQuery.data
     });
-    await ctx.answerCallbackQuery({ text: result.answer });
     if (result.view !== undefined) await editMenu(ctx, result.view);
+    else await editMenu(ctx, { text: result.answer, rows: [] });
   });
 
   bot.on("message:text", async (ctx) => {
