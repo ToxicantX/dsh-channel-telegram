@@ -77,6 +77,11 @@ export function createTelegramBot(token: string, gateway: TelegramGateway, optio
   return bot;
 }
 
+
+export async function sendTelegramDiagnosticReady(bot: Bot, userIds: readonly number[]): Promise<void> {
+  await Promise.all(userIds.map((userId) => bot.api.sendMessage(userId, "DSH Telegram diagnostics online. Send /start to open the target menu.")));
+}
+
 export async function registerTelegramCommands(bot: Bot): Promise<void> {
   await bot.api.setMyCommands([
     { command: "start", description: "Open computer, project, and session menu" },

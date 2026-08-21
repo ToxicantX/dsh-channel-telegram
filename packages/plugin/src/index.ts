@@ -1,7 +1,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
-import { TelegramGateway, createTelegramBot, registerTelegramCommands } from "@dsh-channel-telegram/gateway";
+import { TelegramGateway, createTelegramBot, registerTelegramCommands, sendTelegramDiagnosticReady } from "@dsh-channel-telegram/gateway";
 import { DshAdapter } from "./dsh-adapter.js";
 
 export const name = "dsh-channel-telegram";
@@ -42,6 +42,13 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     await registerTelegramCommands(bot);
   } catch (error) {
     logger.warn("Failed to register Telegram commands", error);
+  }
+  if (config.diagnosticLogging) {
+    try {
+      await sendTelegramDiagnosticReady(bot, config.allowedUserIds);
+    } catch (error) {
+      logger.warn("Failed to send Telegram diagnostic readiness notice", error);
+    }
   }
 
   await ctx.effect(() => {

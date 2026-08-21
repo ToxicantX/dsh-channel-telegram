@@ -2,7 +2,7 @@ import type { Update } from "grammy/types";
 import { describe, expect, it } from "vitest";
 import { TelegramGateway } from "./gateway.js";
 import type { DshPort, TurnProgressListener, TurnResult } from "./ports.js";
-import { createTelegramBot, registerTelegramCommands } from "./telegram.js";
+import { createTelegramBot, registerTelegramCommands, sendTelegramDiagnosticReady } from "./telegram.js";
 
 class FakePort implements DshPort {
   computerGate?: Promise<void>;
@@ -57,6 +57,10 @@ describe("createTelegramBot", () => {
     });
     await bot.init();
     await registerTelegramCommands(bot);
+    await sendTelegramDiagnosticReady(bot, [42]);
+    const readyCall = calls.findLast((call) => call.method === "sendMessage")!;
+    expect(readyCall.payload.chat_id).toBe(42);
+    expect(String(readyCall.payload.text)).toContain("diagnostics online");
     const commandCall = calls.findLast((call) => call.method === "setMyCommands")!;
     expect(commandCall.payload.scope).toEqual({ type: "all_private_chats" });
     expect(commandCall.payload.commands).toEqual(expect.arrayContaining([expect.objectContaining({ command: "start" }), expect.objectContaining({ command: "sessions" })]));

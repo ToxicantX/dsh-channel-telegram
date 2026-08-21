@@ -22,5 +22,6 @@ and tool names from the exact submitted DSH turn are surfaced; reasoning, tool
 arguments, and tool result bodies are not forwarded.
 
 Set diagnosticLogging to true only while troubleshooting inbound delivery. It
-logs update kind and numeric routing metadata, but never message text, callback
-data, credentials, project ids, or session ids.
+sends one readiness notice to each allowlisted user and logs update kind plus
+numeric routing metadata, but never message text, callback data, credentials,
+project ids, or session ids.
