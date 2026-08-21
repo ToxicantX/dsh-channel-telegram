@@ -7,7 +7,7 @@ outbound WSS nodes without introducing a second Telegram Bot poller.
 ## Packages
 
 - @dsh-channel-telegram/protocol: versioned Gateway/Node messages.
-- @dsh-channel-telegram/gateway: authenticated Telegram command and routing core.
+- @dsh-channel-telegram/gateway: authenticated inline menus, turn progress, and routing core.
 - dsh-channel-telegram: DSH 0.1.0-rc.8 Host adapter and Cordis plugin.
 
 ## Development

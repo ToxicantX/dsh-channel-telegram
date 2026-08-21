@@ -1,3 +1,9 @@
+export interface ComputerSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly status: "online" | "offline";
+}
+
 export interface ProjectSummary {
   readonly id: string;
   readonly title: string;
@@ -17,11 +23,24 @@ export interface TurnResult {
   readonly turn: number;
 }
 
+export type TurnProgress =
+  | { readonly type: "queued"; readonly sessionId: string }
+  | { readonly type: "turn-start"; readonly sessionId: string; readonly turn: number }
+  | { readonly type: "assistant-delta"; readonly sessionId: string; readonly turn: number; readonly step: number; readonly text: string }
+  | { readonly type: "assistant-message"; readonly sessionId: string; readonly turn: number; readonly step: number; readonly text: string }
+  | { readonly type: "tool-start"; readonly sessionId: string; readonly turn: number; readonly step: number; readonly callId: string; readonly name: string }
+  | { readonly type: "tool-end"; readonly sessionId: string; readonly turn: number; readonly step: number; readonly callId: string; readonly name: string; readonly failed: boolean }
+  | { readonly type: "turn-end"; readonly sessionId: string; readonly result: TurnResult }
+  | { readonly type: "failed"; readonly sessionId: string; readonly message: string };
+
+export type TurnProgressListener = (progress: TurnProgress) => void;
+
 export interface DshPort {
-  listProjects(): Promise<readonly ProjectSummary[]>;
-  listSessions(projectId: string): Promise<readonly SessionSummary[]>;
-  createSession(projectId: string): Promise<SessionSummary>;
-  send(sessionId: string, text: string): Promise<TurnResult>;
+  listComputers(): Promise<readonly ComputerSummary[]>;
+  listProjects(computerId: string): Promise<readonly ProjectSummary[]>;
+  listSessions(computerId: string, projectId: string): Promise<readonly SessionSummary[]>;
+  createSession(computerId: string, projectId: string): Promise<SessionSummary>;
+  send(sessionId: string, text: string, onProgress?: TurnProgressListener): Promise<TurnResult>;
   status(sessionId: string): Promise<SessionSummary["status"]>;
   stop(sessionId: string): Promise<boolean>;
 }
@@ -32,4 +51,12 @@ export interface TelegramTextUpdate {
   readonly chatType: string;
   readonly userId: number;
   readonly text: string;
+}
+
+export interface TelegramCallbackUpdate {
+  readonly updateId: number;
+  readonly chatId: number;
+  readonly chatType: string;
+  readonly userId: number;
+  readonly data: string;
 }
