@@ -1,6 +1,10 @@
 {
-  "name": "@dsh-channel-telegram/protocol",
-  "version": "0.2.0",
+  "name": "@wsxcant/dsh-channel-telegram-protocol",
+  "version": "0.2.1",
+  "description": "Versioned Gateway and Node protocol contracts for dsh-channel-telegram",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/ToxicantX/dsh-channel-telegram.git", "directory": "packages/protocol" },
+  "publishConfig": { "access": "public" },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

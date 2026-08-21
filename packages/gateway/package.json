@@ -1,6 +1,10 @@
 {
-  "name": "@dsh-channel-telegram/gateway",
-  "version": "0.2.0",
+  "name": "@wsxcant/dsh-channel-telegram-gateway",
+  "version": "0.2.1",
+  "description": "Telegram routing, menus, progress, and session relay for dsh-channel-telegram",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/ToxicantX/dsh-channel-telegram.git", "directory": "packages/gateway" },
+  "publishConfig": { "access": "public" },
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",

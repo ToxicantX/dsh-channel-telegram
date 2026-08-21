@@ -7,7 +7,7 @@ import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionId, type SessionEvent, type TurnEndReason } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-session-query";
 import { WorkspaceId } from "@deepseek-ai/dsh-workspace";
-import type { AgentPresetSummary, ComputerSummary, DshPort, ProjectSummary, SessionSummary, TurnProgress, TurnProgressListener, TurnResult } from "@dsh-channel-telegram/gateway";
+import type { AgentPresetSummary, ComputerSummary, DshPort, ProjectSummary, SessionSummary, TurnProgress, TurnProgressListener, TurnResult } from "@wsxcant/dsh-channel-telegram-gateway";
 
 export interface DshAdapterOptions {
   readonly turnTimeoutMs: number;

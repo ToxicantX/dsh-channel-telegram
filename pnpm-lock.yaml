@@ -29,7 +29,7 @@ importers:
       '@deepseek-ai/schemastery':
         specifier: 3.18.1
         version: 3.18.1
-      '@dsh-channel-telegram/gateway':
+      '@wsxcant/dsh-channel-telegram-gateway':
         specifier: workspace:*
         version: link:../gateway
     devDependencies:

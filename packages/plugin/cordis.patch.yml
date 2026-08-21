@@ -1,0 +1,8 @@
+- insert:
+    - id: telegram-channel
+      name: dsh-channel-telegram
+      config:
+        allowedUserIds: []
+        hostName: Local DSH
+        diagnosticLogging: false
+      disabled: false

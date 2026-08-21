@@ -2,7 +2,7 @@ import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
 import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings";
-import { TelegramGateway, createTelegramBot, registerTelegramCommands, sendTelegramDiagnosticReady } from "@dsh-channel-telegram/gateway";
+import { TelegramGateway, createTelegramBot, registerTelegramCommands, sendTelegramDiagnosticReady } from "@wsxcant/dsh-channel-telegram-gateway";
 import { DshAdapter } from "./dsh-adapter.js";
 
 export const name = "dsh-channel-telegram";
