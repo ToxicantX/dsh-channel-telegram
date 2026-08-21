@@ -17,6 +17,13 @@ export interface SessionSummary {
   readonly status: "idle" | "running" | "offline";
 }
 
+export interface AgentPresetSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly description?: string;
+  readonly isDefault: boolean;
+}
+
 export interface TurnResult {
   readonly text: string;
   readonly reason: "completed" | "aborted" | "blocked" | "error" | "max-tokens" | "interrupted";
@@ -39,10 +46,12 @@ export interface DshPort {
   listComputers(): Promise<readonly ComputerSummary[]>;
   listProjects(computerId: string): Promise<readonly ProjectSummary[]>;
   listSessions(computerId: string, projectId: string): Promise<readonly SessionSummary[]>;
-  createSession(computerId: string, projectId: string): Promise<SessionSummary>;
+  listAgentPresets(): Promise<readonly AgentPresetSummary[]>;
+  createSession(computerId: string, projectId: string, agentPresetId: string): Promise<SessionSummary>;
   send(sessionId: string, text: string, onProgress?: TurnProgressListener): Promise<TurnResult>;
   status(sessionId: string): Promise<SessionSummary["status"]>;
   stop(sessionId: string): Promise<boolean>;
+  watchSession(sessionId: string, listener: TurnProgressListener): () => void;
 }
 
 export interface TelegramTextUpdate {

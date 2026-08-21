@@ -35,10 +35,20 @@ Never place the Bot Token in composition configuration, repository files, logs,
 or normal settings. Only one running plugin instance may own a Bot Token.
 
 Use /start or /menu in the private bot chat to select the computer, project,
-and session through inline buttons. The bot edits one progress message at the
-configured interval and finalizes it with the correlated turn result. Only text
-and tool names from the exact submitted DSH turn are surfaced; reasoning, tool
-arguments, and tool result bodies are not forwarded.
+and session through inline buttons. `/new` opens the available Agent preset
+menu and creates the session only after a preset is selected.
+
+Once a session is selected, the bot relays that session's running turns even
+when they were started from the DSH GUI or another client. Switching computer,
+project, or session immediately removes the previous subscription. A Telegram
+message still uses exact message/turn correlation for its direct progress, while
+the selected-session relay is suppressed for that originating chat to avoid a
+duplicate. Other chats selecting the same session continue to receive it.
+
+The bot edits one progress message at the configured interval and finalizes it
+with the turn result. Only visible assistant text and tool names/status are
+forwarded; reasoning, tool arguments, tool result bodies, and internal error
+details are not forwarded.
 
 Set diagnosticLogging to true only while troubleshooting inbound delivery. It
 sends one readiness notice to each allowlisted user and logs update kind plus

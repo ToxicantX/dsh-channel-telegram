@@ -76,6 +76,29 @@ describe("ProgressMessageEditor", () => {
       .rejects.toThrow("Too Many Requests");
   });
 
+  it("cancels pending edits and ignores updates after disposal", async () => {
+    const sent: string[] = [];
+    const edits: string[] = [];
+    let scheduled: (() => void) | undefined;
+    const editor = new ProgressMessageEditor({
+      send: async (text) => { sent.push(text); return { messageId: 1 }; },
+      edit: async (_id, text) => { edits.push(text); }
+    }, {
+      intervalMs: 1000,
+      now: () => 0,
+      setTimer: (callback) => { scheduled = callback; return 1 as unknown as ReturnType<typeof setTimeout>; },
+      clearTimer: () => { scheduled = undefined; }
+    });
+    await editor.update({ type: "queued", sessionId: "session-one" });
+    await editor.update({ type: "turn-start", sessionId: "session-one", turn: 7 });
+    expect(scheduled).toBeTypeOf("function");
+    editor.dispose();
+    expect(scheduled).toBeUndefined();
+    await editor.update({ type: "turn-end", sessionId: "session-one", result: result("late") });
+    expect(sent).toHaveLength(1);
+    expect(edits).toHaveLength(0);
+  });
+
   it("sends continuation messages for final output over 4096 characters", async () => {
     const sent: string[] = [];
     const edits: string[] = [];

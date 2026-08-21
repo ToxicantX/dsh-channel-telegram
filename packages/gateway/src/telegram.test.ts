@@ -1,18 +1,29 @@
 import type { Update } from "grammy/types";
 import { describe, expect, it } from "vitest";
 import { TelegramGateway } from "./gateway.js";
-import type { DshPort, TurnProgressListener, TurnResult } from "./ports.js";
+import type { DshPort, TurnProgress, TurnProgressListener, TurnResult } from "./ports.js";
 import { createTelegramBot, registerTelegramCommands, sendTelegramDiagnosticReady } from "./telegram.js";
 
 class FakePort implements DshPort {
   computerGate?: Promise<void>;
+  private readonly watchers = new Map<string, Set<TurnProgressListener>>();
   async listComputers() {
     await this.computerGate;
     return [{ id: "local", title: "Local DSH", status: "online" }] as const;
   }
   async listProjects() { return [{ id: "p1", title: "Project", path: "C:/project", status: "online" }] as const; }
   async listSessions() { return [{ id: "s1", title: "Session", status: "idle" }] as const; }
+  async listAgentPresets() { return [{ id: "default", title: "Default", isDefault: true }] as const; }
   async createSession() { return { id: "s2", title: "New", status: "idle" } as const; }
+  watchSession(sessionId: string, listener: TurnProgressListener) {
+    let listeners = this.watchers.get(sessionId);
+    if (listeners === undefined) { listeners = new Set(); this.watchers.set(sessionId, listeners); }
+    listeners.add(listener);
+    return () => { listeners?.delete(listener); };
+  }
+  emit(progress: TurnProgress): void {
+    for (const listener of this.watchers.get(progress.sessionId) ?? []) listener(progress);
+  }
   async send(sessionId: string, _text: string, onProgress?: TurnProgressListener): Promise<TurnResult> {
     onProgress?.({ type: "turn-start", sessionId, turn: 9 });
     onProgress?.({ type: "tool-start", sessionId, turn: 9, step: 1, callId: "c1", name: "read" });
@@ -91,6 +102,18 @@ describe("createTelegramBot", () => {
     await bot.handleUpdate(callbackUpdate(5, firstCallback(edit.payload)));
     edit = calls.findLast((call) => call.method === "editMessageText")!;
     expect(String(edit.payload.text)).toContain("Session: s1");
+
+    const beforeExternalTurn = calls.length;
+    port.emit({ type: "turn-start", sessionId: "s1", turn: 8 });
+    port.emit({ type: "assistant-message", sessionId: "s1", turn: 8, step: 1, text: "reply from GUI" });
+    port.emit({ type: "turn-end", sessionId: "s1", result: { text: "reply from GUI", reason: "completed", turn: 8 } });
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
+    const externalTurnCalls = calls.slice(beforeExternalTurn);
+    expect(externalTurnCalls[0]?.method).toBe("sendMessage");
+    expect(String(externalTurnCalls[0]?.payload.text)).toContain("Running");
+    expect(externalTurnCalls.at(-1)?.method).toBe("editMessageText");
+    expect(String(externalTurnCalls.at(-1)?.payload.text)).toContain("reply from GUI");
+    expect(String(externalTurnCalls.at(-1)?.payload.text)).toContain("Turn: 8");
 
     const beforeTurn = calls.length;
     await bot.handleUpdate(messageUpdate(6, "read package name"));

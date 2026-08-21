@@ -114,6 +114,7 @@ export class ProgressMessageEditor {
   private timer?: ReturnType<typeof setTimeout>;
   private editTail = Promise.resolve();
   private finalDelivered = false;
+  private disposed = false;
 
   constructor(private readonly transport: ProgressMessageTransport, options: ProgressMessageEditorOptions = {}) {
     this.intervalMs = Math.max(250, options.intervalMs ?? 1000);
@@ -123,6 +124,7 @@ export class ProgressMessageEditor {
   }
 
   async update(progress: TurnProgress): Promise<void> {
+    if (this.disposed) return;
     this.renderer.accept(progress);
     if (this.messageId === undefined) {
       const [first = "", ...rest] = this.renderer.isFinal ? this.renderer.renderFinalParts() : [this.renderer.render()];
@@ -137,11 +139,12 @@ export class ProgressMessageEditor {
     }
     if (this.renderer.isFinal) {
       if (this.finalDelivered) return;
-      this.finalDelivered = true;
       if (this.timer !== undefined) { this.clearTimer(this.timer); this.timer = undefined; }
       const [first = "", ...rest] = this.renderer.renderFinalParts();
       await this.enqueueText(first);
+      if (this.disposed) return;
       for (const part of rest) await this.transport.send(part);
+      this.finalDelivered = true;
       return;
     }
     const delay = this.intervalMs - (this.now() - this.lastEditAt);
@@ -152,9 +155,15 @@ export class ProgressMessageEditor {
     if (this.timer === undefined) {
       this.timer = this.setTimer(() => {
         this.timer = undefined;
-        void this.enqueueEdit();
+        if (!this.disposed) void this.enqueueEdit();
       }, delay);
     }
+  }
+
+  dispose(): void {
+    if (this.disposed) return;
+    this.disposed = true;
+    if (this.timer !== undefined) { this.clearTimer(this.timer); this.timer = undefined; }
   }
 
   private async enqueueEdit(): Promise<void> {
@@ -162,9 +171,11 @@ export class ProgressMessageEditor {
   }
 
   private async enqueueText(text: string): Promise<void> {
+    if (this.disposed) return;
     const messageId = this.messageId;
     if (messageId === undefined) return;
     this.editTail = this.editTail.then(async () => {
+      if (this.disposed) return;
       try {
         await this.transport.edit(messageId, text);
       } catch (error) {

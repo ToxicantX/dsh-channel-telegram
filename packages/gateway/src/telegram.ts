@@ -1,6 +1,7 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import type { GatewayReply, TelegramGateway } from "./gateway.js";
 import type { MenuView } from "./menu.js";
+import type { TurnProgress } from "./ports.js";
 import { ProgressMessageEditor, ProgressMessageUnavailableError } from "./progress.js";
 
 const TELEGRAM_TEXT_LIMIT = 4096;
@@ -20,6 +21,38 @@ export interface TelegramBotOptions {
 
 export function createTelegramBot(token: string, gateway: TelegramGateway, options: TelegramBotOptions = {}): Bot {
   const bot = new Bot(token);
+  const relayEditors = new Map<number, { readonly sessionId: string; readonly turn: number; readonly editor: ProgressMessageEditor }>();
+
+  const disposeRelay = gateway.onSessionProgress(async ({ chatId, progress }) => {
+    const turn = turnOf(progress);
+    if (turn === undefined) return;
+    let current = relayEditors.get(chatId);
+    if (current === undefined || current.sessionId !== progress.sessionId || current.turn !== turn) {
+      current?.editor.dispose();
+      current = {
+        sessionId: progress.sessionId,
+        turn,
+        editor: botProgressEditor(bot, chatId, options.progressEditIntervalMs)
+      };
+      relayEditors.set(chatId, current);
+    }
+    try {
+      await current.editor.update(progress);
+    } catch {
+      current.editor.dispose();
+      if (relayEditors.get(chatId) === current) relayEditors.delete(chatId);
+      return;
+    }
+    if (progress.type === "turn-end" || progress.type === "failed") {
+      current.editor.dispose();
+      if (relayEditors.get(chatId) === current) relayEditors.delete(chatId);
+    }
+  });
+  gateway.onDispose(() => {
+    disposeRelay();
+    for (const current of relayEditors.values()) current.editor.dispose();
+    relayEditors.clear();
+  });
 
   bot.use(async (ctx, next) => {
     const callbackMessage = ctx.callbackQuery?.message;
@@ -77,6 +110,33 @@ export function createTelegramBot(token: string, gateway: TelegramGateway, optio
   return bot;
 }
 
+function botProgressEditor(bot: Bot, chatId: number, intervalMs: number | undefined): ProgressMessageEditor {
+  return new ProgressMessageEditor({
+    send: async (text) => ({ messageId: (await bot.api.sendMessage(chatId, text)).message_id }),
+    edit: async (messageId, text) => {
+      try {
+        await bot.api.editMessageText(chatId, messageId, text);
+      } catch (error) {
+        if (isNotModified(error)) return;
+        if (isUnavailableEdit(error)) throw new ProgressMessageUnavailableError("Telegram progress message is unavailable", { cause: error });
+        throw error;
+      }
+    }
+  }, { intervalMs });
+}
+
+function turnOf(progress: TurnProgress): number | undefined {
+  switch (progress.type) {
+    case "turn-start":
+    case "assistant-delta":
+    case "assistant-message":
+    case "tool-start":
+    case "tool-end": return progress.turn;
+    case "turn-end": return progress.result.turn;
+    case "queued":
+    case "failed": return undefined;
+  }
+}
 
 export async function sendTelegramDiagnosticReady(bot: Bot, userIds: readonly number[]): Promise<void> {
   await Promise.all(userIds.map((userId) => bot.api.sendMessage(userId, "DSH Telegram diagnostics online. Send /start to open the target menu.")));

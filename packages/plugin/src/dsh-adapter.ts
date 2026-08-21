@@ -7,12 +7,11 @@ import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionId, type SessionEvent, type TurnEndReason } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-session-query";
 import { WorkspaceId } from "@deepseek-ai/dsh-workspace";
-import type { ComputerSummary, DshPort, ProjectSummary, SessionSummary, TurnProgress, TurnProgressListener, TurnResult } from "@dsh-channel-telegram/gateway";
+import type { AgentPresetSummary, ComputerSummary, DshPort, ProjectSummary, SessionSummary, TurnProgress, TurnProgressListener, TurnResult } from "@dsh-channel-telegram/gateway";
 
 export interface DshAdapterOptions {
   readonly turnTimeoutMs: number;
   readonly hostName: string;
-  readonly agentPreset?: string;
 }
 
 export interface CollectorUpdate {
@@ -52,9 +51,9 @@ export class CorrelatedTurnCollector {
     }
     if (event.type === "tool/result" && event.data.turn === this.targetTurn) {
       const block = event.data.message.content[0];
-      const callId = String(block.toolCallId);
+      const callId = block?.type === "tool-result" ? String(block.toolCallId) : "tool-" + String(this.targetTurn) + "-" + String(event.data.step);
       const name = this.tools.get(callId) ?? "tool";
-      return { progress: { type: "tool-end", sessionId: this.sessionId, turn: this.targetTurn, step: event.data.step, callId, name, failed: event.data.error !== undefined || block.isError === true } };
+      return { progress: { type: "tool-end", sessionId: this.sessionId, turn: this.targetTurn, step: event.data.step, callId, name, failed: event.data.error !== undefined || block?.isError === true } };
     }
     if (event.type !== "turn/end" || event.data.turn !== this.targetTurn) return {};
     const result = { text: this.text || errorText(event.data.reason), reason: event.data.reason.kind, turn: event.data.turn } satisfies TurnResult;
@@ -67,14 +66,109 @@ function visibleText(content: readonly { readonly type: string; readonly text?: 
 }
 
 function errorText(reason: TurnEndReason): string {
-  return reason.kind === "error" ? "DSH error: " + reason.error.message : "";
+  return reason.kind === "error" ? "DSH turn failed." : "";
+}
+
+/** Collects progress from a session subscription that may start mid-turn. */
+export class ObservedTurnCollector {
+  private turn?: number;
+  private ended = false;
+  private text = "";
+  private readonly tools = new Map<string, string>();
+
+  constructor(private readonly sessionId: string) {}
+
+  accept(event: SessionEvent): readonly TurnProgress[] {
+    const progress: TurnProgress[] = [];
+    const eventTurn = eventTurnOf(event);
+    if (event.type === "turn/start") {
+      if (this.turn === undefined || event.data.turn > this.turn) this.begin(event.data.turn, progress);
+      else return progress;
+    } else if (eventTurn !== undefined) {
+      if (this.turn !== undefined && eventTurn < this.turn) return progress;
+      if (this.turn === undefined || eventTurn > this.turn) this.begin(eventTurn, progress);
+      else if (this.ended) return progress;
+    }
+    if (this.turn === undefined) return progress;
+
+    switch (event.type) {
+      case "assistant/chunk":
+        if (event.data.turn === this.turn && event.data.chunk.type === "text-delta" && event.data.chunk.text !== "") {
+          this.text += event.data.chunk.text;
+          progress.push({ type: "assistant-delta", sessionId: this.sessionId, turn: this.turn, step: event.data.step, text: event.data.chunk.text });
+        }
+        break;
+      case "assistant/message":
+        if (event.data.turn === this.turn) {
+          this.text = visibleText(event.data.message.content);
+          progress.push({ type: "assistant-message", sessionId: this.sessionId, turn: this.turn, step: event.data.step, text: this.text });
+        }
+        break;
+      case "tool/call": {
+        if (event.data.turn !== this.turn) break;
+        const callId = String(event.data.callId);
+        this.tools.set(callId, event.data.name);
+        progress.push({ type: "tool-start", sessionId: this.sessionId, turn: this.turn, step: event.data.step, callId, name: event.data.name });
+        break;
+      }
+      case "tool/result": {
+        if (event.data.turn !== this.turn) break;
+        const block = event.data.message.content[0];
+        const callId = block?.type === "tool-result" ? String(block.toolCallId) : "tool-" + String(this.turn) + "-" + String(event.data.step);
+        const name = this.tools.get(callId) ?? "tool";
+        progress.push({ type: "tool-end", sessionId: this.sessionId, turn: this.turn, step: event.data.step, callId, name, failed: event.data.error !== undefined || block?.isError === true });
+        this.tools.delete(callId);
+        break;
+      }
+      case "turn/end": {
+        if (event.data.turn !== this.turn) break;
+        const result = { text: this.text || errorText(event.data.reason), reason: event.data.reason.kind, turn: event.data.turn } satisfies TurnResult;
+        progress.push({ type: "turn-end", sessionId: this.sessionId, result });
+        this.ended = true;
+        break;
+      }
+    }
+    return progress;
+  }
+
+  collect(event: SessionEvent): readonly TurnProgress[] {
+    return this.accept(event);
+  }
+
+  private begin(turn: number, progress: TurnProgress[]): void {
+    this.turn = turn;
+    this.ended = false;
+    this.text = "";
+    this.tools.clear();
+    progress.push({ type: "turn-start", sessionId: this.sessionId, turn });
+  }
+}
+
+function eventTurnOf(event: SessionEvent): number | undefined {
+  if (typeof event.data !== "object" || event.data === null) return undefined;
+  const turn = (event.data as { readonly turn?: unknown }).turn;
+  return typeof turn === "number" ? turn : undefined;
 }
 
 export class DshAdapter implements DshPort {
   private readonly handles = new Map<string, AgentHandle>();
+  private readonly watchers = new Set<() => void>();
 
   constructor(private readonly ctx: Context, private readonly options: DshAdapterOptions) {
     if (!Number.isSafeInteger(options.turnTimeoutMs) || options.turnTimeoutMs < 1) throw new Error("turnTimeoutMs must be a positive integer");
+  }
+
+  async listAgentPresets(): Promise<readonly AgentPresetSummary[]> {
+    const presets = await this.ctx.agentPresets.list();
+    const defaultId = this.ctx.agentPresets.defaultId;
+    return presets
+      .filter((preset) => preset.broken === undefined)
+      .map((preset) => ({
+        id: preset.id,
+        title: preset.name ?? preset.id,
+        description: preset.description,
+        isDefault: preset.id === defaultId
+      }));
   }
 
   async listComputers(): Promise<readonly ComputerSummary[]> {
@@ -101,13 +195,16 @@ export class DshAdapter implements DshPort {
     }));
   }
 
-  async createSession(computerId: string, projectId: string): Promise<SessionSummary> {
+  async createSession(computerId: string, projectId: string, agentPresetId: string): Promise<SessionSummary> {
+    if (typeof agentPresetId !== "string" || agentPresetId.length === 0) throw new Error("agentPresetId is required");
     this.assertLocal(computerId);
     const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(projectId));
     if (workspace === undefined) throw new Error("Unknown workspace");
     if ((await workspace.status()) !== "ok") throw new Error("Workspace directory is missing");
+    const preset = (await this.ctx.agentPresets.list()).find((item) => item.id === agentPresetId && item.broken === undefined);
+    if (preset === undefined) throw new Error("Agent preset is no longer available");
     const selection = this.ctx.agentDefaultModel.currentSelection();
-    const presetId = this.options.agentPreset ?? this.ctx.agentPresets.defaultId;
+    const presetId = preset.id;
     const sessionId = SessionId("session-" + randomUUID());
     const handle = await this.ctx.agents.create({
       sessionId,
@@ -121,6 +218,23 @@ export class DshAdapter implements DshPort {
     this.handles.set(String(sessionId), handle);
     await workspace.attachSession(sessionId);
     return { id: String(sessionId), title: String(sessionId), status: handle.agent.status };
+  }
+
+  watchSession(sessionId: string, listener: TurnProgressListener): () => void {
+    const collector = new ObservedTurnCollector(sessionId);
+    const unsubscribe = this.ctx.on("session/event", (session, event) => {
+      if (String(session.id) !== sessionId) return;
+      for (const progress of collector.accept(event)) listener(progress);
+    });
+    let active = true;
+    const dispose = (): void => {
+      if (!active) return;
+      active = false;
+      this.watchers.delete(dispose);
+      unsubscribe();
+    };
+    this.watchers.add(dispose);
+    return dispose;
   }
 
   async send(sessionId: string, text: string, onProgress?: TurnProgressListener): Promise<TurnResult> {
@@ -166,6 +280,8 @@ export class DshAdapter implements DshPort {
   }
 
   async dispose(): Promise<void> {
+    const watchers = [...this.watchers];
+    for (const dispose of watchers) dispose();
     const handles = [...this.handles.values()].reverse();
     this.handles.clear();
     await Promise.allSettled(handles.map((handle) => handle.dispose()));

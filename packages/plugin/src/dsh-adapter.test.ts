@@ -1,7 +1,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import type { SessionEvent } from "@deepseek-ai/dsh-session";
 import { describe, expect, it } from "vitest";
-import { CorrelatedTurnCollector, DshAdapter } from "./dsh-adapter.js";
+import { CorrelatedTurnCollector, DshAdapter, ObservedTurnCollector } from "./dsh-adapter.js";
 
 function event(value: unknown): SessionEvent { return value as SessionEvent; }
 function envelope(type: string, data: unknown, seq = 1) { return event({ type, seq, time: 1, data }); }
@@ -41,7 +41,7 @@ describe("CorrelatedTurnCollector", () => {
     collector.accept(envelope("turn/start", { turn: 2 }));
     collector.accept(envelope("user/message", { id: "wanted" }));
     expect(collector.accept(envelope("turn/end", { turn: 2, reason: { kind: "error", error: { message: "failed", code: "UNKNOWN" } } })).result)
-      .toEqual({ text: "DSH error: failed", reason: "error", turn: 2 });
+      .toEqual({ text: "DSH turn failed.", reason: "error", turn: 2 });
   });
 });
 
@@ -85,5 +85,184 @@ describe("DshAdapter.send", () => {
     expect(progress).toEqual(["turn-start", "assistant-delta", "assistant-message", "turn-end"]);
     expect(disposed).toBe(1);
     expect(listener).toBeUndefined();
+  });
+});
+
+describe("ObservedTurnCollector", () => {
+  it("maps visible output and tool status without leaking private fields", () => {
+    const collector = new ObservedTurnCollector("session-observed");
+    expect(collector.accept(envelope("turn/start", { turn: 7 }))).toEqual([
+      { type: "turn-start", sessionId: "session-observed", turn: 7 }
+    ]);
+    expect(collector.accept(envelope("assistant/chunk", {
+      turn: 7, step: 1, chunk: { type: "reasoning-delta", index: 0, text: "private" }
+    }))).toEqual([]);
+    expect(collector.accept(envelope("assistant/chunk", {
+      turn: 7, step: 1, chunk: { type: "text-delta", index: 0, text: "visible " }
+    }))).toEqual([
+      { type: "assistant-delta", sessionId: "session-observed", turn: 7, step: 1, text: "visible " }
+    ]);
+    expect(collector.accept(envelope("tool/call", {
+      turn: 7, step: 1, callId: "call-7", name: "read", arguments: "{secret}"
+    }))).toEqual([
+      { type: "tool-start", sessionId: "session-observed", turn: 7, step: 1, callId: "call-7", name: "read" }
+    ]);
+    expect(collector.accept(envelope("tool/result", {
+      turn: 7, step: 1, message: { content: [{
+        type: "tool-result", toolCallId: "call-7", isError: true, content: [{ type: "text", text: "secret result" }]
+      }] }, error: { name: "ToolError", code: "E_TOOL" }, result: "secret body"
+    }))).toEqual([
+      { type: "tool-end", sessionId: "session-observed", turn: 7, step: 1, callId: "call-7", name: "read", failed: true }
+    ]);
+    expect(collector.accept(envelope("assistant/message", {
+      turn: 7, step: 2, message: { content: [{ type: "reasoning", text: "private" }, { type: "text", text: "answer" }] }
+    }))).toEqual([
+      { type: "assistant-message", sessionId: "session-observed", turn: 7, step: 2, text: "answer" }
+    ]);
+    expect(collector.accept(envelope("turn/end", { turn: 7, reason: { kind: "completed" } }))).toEqual([
+      { type: "turn-end", sessionId: "session-observed", result: { text: "answer", reason: "completed", turn: 7 } }
+    ]);
+    expect(collector.accept(envelope("assistant/message", {
+      turn: 7, step: 3, message: { content: [{ type: "text", text: "late" }] }
+    }))).toEqual([]);
+    expect(collector.accept(envelope("assistant/chunk", {
+      turn: 6, step: 1, chunk: { type: "text-delta", index: 0, text: "older" }
+    }))).toEqual([]);
+  });
+
+  it("infers a mid-turn subscription and resets sequential turn state", () => {
+    const collector = new ObservedTurnCollector("session-observed");
+    expect(collector.accept(envelope("assistant/chunk", {
+      turn: 3, step: 1, chunk: { type: "text-delta", index: 0, text: "mid" }
+    }))).toEqual([
+      { type: "turn-start", sessionId: "session-observed", turn: 3 },
+      { type: "assistant-delta", sessionId: "session-observed", turn: 3, step: 1, text: "mid" }
+    ]);
+    expect(collector.accept(envelope("tool/call", {
+      turn: 3, step: 1, callId: "same-call", name: "old-tool", arguments: "{}"
+    }))).toHaveLength(1);
+    expect(collector.accept(envelope("turn/start", { turn: 4 }))).toEqual([
+      { type: "turn-start", sessionId: "session-observed", turn: 4 }
+    ]);
+    expect(collector.accept(envelope("tool/result", {
+      turn: 4, step: 1, message: { content: [{ type: "tool-result", toolCallId: "same-call", content: [] }] }
+    }))).toEqual([
+      { type: "tool-end", sessionId: "session-observed", turn: 4, step: 1, callId: "same-call", name: "tool", failed: false }
+    ]);
+    expect(collector.accept(envelope("tool/result", {
+      turn: 4, step: 2, message: { content: [] }
+    }))).toEqual([
+      { type: "tool-end", sessionId: "session-observed", turn: 4, step: 2, callId: "tool-4-2", name: "tool", failed: false }
+    ]);
+    expect(collector.accept(envelope("turn/end", { turn: 4, reason: { kind: "completed" } }))).toEqual([
+      { type: "turn-end", sessionId: "session-observed", result: { text: "", reason: "completed", turn: 4 } }
+    ]);
+  });
+});
+
+describe("DshAdapter presets and watchSession", () => {
+  it("filters broken presets and passes the selected preset through metadata and setup", async () => {
+    let listCalls = 0;
+    let mounted: string | undefined;
+    let created: any;
+    const workspace = {
+      id: "project-1", title: "Project", path: "C:\\workspace\\project-1", sessionIds: [],
+      status: async () => "ok" as const, attachSession: async () => undefined
+    };
+    const ctx = {
+      agentPresets: {
+        defaultId: "named",
+        list: async () => {
+          listCalls += 1;
+          return [
+            { id: "default", description: "Default" },
+            { id: "named", name: "Named", description: "Named description" },
+            { id: "broken-empty", name: "Broken", broken: "" },
+            { id: "broken", name: "Broken", broken: "invalid yaml" }
+          ];
+        },
+        mount: async (_agentCtx: Context, id?: string) => { mounted = id; }
+      },
+      workspaceRegistry: { get: () => workspace },
+      agentDefaultModel: { currentSelection: () => ({ provider: "provider", model: "model" }) },
+      agents: {
+        create: async (options: any) => {
+          created = options;
+          await options.setup({ on: () => () => true } as unknown as Context);
+          return { agent: { status: "idle" }, dispose: async () => undefined };
+        },
+        get: () => undefined
+      },
+      on: () => () => true
+    } as unknown as Context;
+    const adapter = new DshAdapter(ctx, { turnTimeoutMs: 1000, hostName: "Build Host" });
+
+    await expect(adapter.listAgentPresets()).resolves.toEqual([
+      { id: "default", title: "default", description: "Default", isDefault: false },
+      { id: "named", title: "Named", description: "Named description", isDefault: true }
+    ]);
+    expect(listCalls).toBe(1);
+
+    await adapter.createSession("local", "project-1", "named");
+    expect(created.meta).toEqual({ cwd: workspace.path, agentPreset: "named" });
+    expect(mounted).toBe("named");
+    expect(listCalls).toBe(2);
+    await expect(adapter.createSession("local", "project-1")).rejects.toThrow("agentPresetId is required");
+  });
+
+  it("isolates sessions, disposes watch subscriptions idempotently, and disposes before handles", async () => {
+    type EventListener = (session: { id: string }, event: SessionEvent) => void;
+    const subscriptions: { active: boolean; listener: EventListener }[] = [];
+    const order: string[] = [];
+    let unsubscribeCalls = 0;
+    const workspace = {
+      id: "project-1", title: "Project", path: "C:\\workspace\\project-1", sessionIds: [],
+      status: async () => "ok" as const, attachSession: async () => undefined
+    };
+    const ctx = {
+      agentPresets: { defaultId: "default", list: async () => [{ id: "default" }], mount: async () => undefined },
+      workspaceRegistry: { get: () => workspace },
+      agentDefaultModel: { currentSelection: () => ({ provider: "provider", model: "model" }) },
+      agents: {
+        create: async () => ({ agent: { status: "idle" }, dispose: async () => { order.push("handle"); } }),
+        get: () => undefined
+      },
+      on: (_name: string, listener: EventListener) => {
+        const subscription = { active: true, listener };
+        subscriptions.push(subscription);
+        return () => {
+          if (!subscription.active) return false;
+          subscription.active = false;
+          unsubscribeCalls += 1;
+          order.push("watcher");
+          return true;
+        };
+      }
+    } as unknown as Context;
+    const emit = (sessionId: string, value: unknown): void => {
+      for (const subscription of subscriptions) {
+        if (subscription.active) subscription.listener({ id: sessionId }, event(value));
+      }
+    };
+    const adapter = new DshAdapter(ctx, { turnTimeoutMs: 1000, hostName: "Build Host" });
+    const seen: string[] = [];
+    const stop = adapter.watchSession("session-target", (progress) => { seen.push(progress.type + ":" + progress.sessionId); });
+
+    emit("session-other", { type: "assistant/chunk", seq: 1, time: 1, data: { turn: 8, step: 1, chunk: { type: "text-delta", index: 0, text: "other" } } });
+    emit("session-target", { type: "assistant/chunk", seq: 2, time: 1, data: { turn: 8, step: 1, chunk: { type: "text-delta", index: 0, text: "target" } } });
+    expect(seen).toEqual(["turn-start:session-target", "assistant-delta:session-target"]);
+
+    stop();
+    stop();
+    emit("session-target", { type: "turn/end", seq: 3, time: 1, data: { turn: 8, reason: { kind: "completed" } } });
+    expect(seen).toHaveLength(2);
+    expect(unsubscribeCalls).toBe(1);
+
+    const secondStop = adapter.watchSession("session-target", () => undefined);
+    await adapter.createSession("local", "project-1", "default");
+    await adapter.dispose();
+    secondStop();
+    expect(order).toEqual(["watcher", "watcher", "handle"]);
+    expect(unsubscribeCalls).toBe(2);
   });
 });

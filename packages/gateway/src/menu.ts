@@ -17,7 +17,9 @@ export type MenuAction =
   | { readonly type: "projects"; readonly computerId: string; readonly page: number }
   | { readonly type: "select-project"; readonly computerId: string; readonly projectId: string }
   | { readonly type: "sessions"; readonly computerId: string; readonly projectId: string; readonly page: number }
-  | { readonly type: "select-session"; readonly computerId: string; readonly projectId: string; readonly sessionId: string };
+  | { readonly type: "select-session"; readonly computerId: string; readonly projectId: string; readonly sessionId: string }
+  | { readonly type: "presets"; readonly computerId: string; readonly projectId: string; readonly page: number }
+  | { readonly type: "create-session"; readonly computerId: string; readonly projectId: string; readonly presetId: string };
 
 interface TokenRecord {
   readonly userId: number;

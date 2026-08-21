@@ -21,7 +21,6 @@ export interface Config {
   readonly turnTimeoutMs: number;
   readonly progressEditIntervalMs: number;
   readonly diagnosticLogging: boolean;
-  readonly agentPreset?: string;
 }
 
 export const Config: z<Config> = z.object({
@@ -29,8 +28,7 @@ export const Config: z<Config> = z.object({
   hostName: z.string().min(1).max(64).default(DEFAULT_HOST_NAME),
   turnTimeoutMs: z.number().step(1).min(1).default(600000),
   progressEditIntervalMs: z.number().step(1).min(1).default(1000),
-  diagnosticLogging: z.boolean().default(false),
-  agentPreset: z.string()
+  diagnosticLogging: z.boolean().default(false)
 });
 
 export interface TelegramRuntimeSettings {
@@ -57,6 +55,7 @@ type TelegramBot = ReturnType<typeof createTelegramBot>;
 
 interface ActiveRuntime {
   readonly adapter: DshAdapter;
+  readonly gateway: TelegramGateway;
   readonly bot: TelegramBot;
   running: Promise<void>;
   stopping: boolean;
@@ -65,6 +64,7 @@ interface ActiveRuntime {
 async function stopRuntime(runtime: ActiveRuntime | undefined): Promise<void> {
   if (runtime === undefined) return;
   runtime.stopping = true;
+  runtime.gateway.dispose();
   try {
     await runtime.bot.stop();
   } finally {
@@ -94,8 +94,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
 
     const adapter = new DshAdapter(ctx, {
       turnTimeoutMs: config.turnTimeoutMs,
-      hostName: settings.hostName,
-      agentPreset: config.agentPreset
+      hostName: settings.hostName
     });
     const gateway = new TelegramGateway(adapter, { allowedUserIds: settings.allowedUserIds });
     const bot = createTelegramBot(resolved.value, gateway, {
@@ -116,7 +115,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
       }
     }
 
-    const next: ActiveRuntime = { adapter, bot, running: Promise.resolve(), stopping: false };
+    const next: ActiveRuntime = { adapter, gateway, bot, running: Promise.resolve(), stopping: false };
     next.running = bot.start({ drop_pending_updates: false });
     void next.running.catch((error) => {
       if (!next.stopping) logger.error(error);
