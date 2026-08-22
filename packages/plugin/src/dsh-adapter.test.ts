@@ -160,6 +160,38 @@ describe("ObservedTurnCollector", () => {
   });
 });
 
+describe("DshAdapter session listing", () => {
+  it("keeps idle and running sessions but excludes globally archived sessions", async () => {
+    const titleReads: string[] = [];
+    const workspace = {
+      id: "project-1",
+      title: "Project",
+      path: "C:\\workspace\\project-1",
+      sessionIds: ["session-idle", "session-running", "session-archived"],
+      status: async () => "ok" as const
+    };
+    const ctx = {
+      workspaceRegistry: {
+        get: () => workspace,
+        archivedSessionIds: ["session-archived"]
+      },
+      sessionQuery: {
+        readTitle: async (sessionId: string) => { titleReads.push(sessionId); return { title: "Title " + sessionId }; }
+      },
+      agents: {
+        get: (sessionId: string) => sessionId === "session-running" ? { status: "running" } : sessionId === "session-idle" ? { status: "idle" } : undefined
+      }
+    } as unknown as Context;
+    const adapter = new DshAdapter(ctx, { turnTimeoutMs: 1000, hostName: "Build Host" });
+
+    await expect(adapter.listSessions("local", "project-1")).resolves.toEqual([
+      { id: "session-idle", title: "Title session-idle", status: "idle" },
+      { id: "session-running", title: "Title session-running", status: "running" }
+    ]);
+    expect(titleReads).toEqual(["session-idle", "session-running"]);
+  });
+});
+
 describe("DshAdapter presets and watchSession", () => {
   it("filters broken presets and passes the selected preset through metadata and setup", async () => {
     let listCalls = 0;

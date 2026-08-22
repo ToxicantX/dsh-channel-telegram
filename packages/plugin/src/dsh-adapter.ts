@@ -189,7 +189,9 @@ export class DshAdapter implements DshPort {
     this.assertLocal(computerId);
     const workspace = this.ctx.workspaceRegistry.get(WorkspaceId(projectId));
     if (workspace === undefined) throw new Error("Unknown workspace");
-    return Promise.all(workspace.sessionIds.map(async (sessionId) => {
+    const archivedSessionIds = new Set(this.ctx.workspaceRegistry.archivedSessionIds.map(String));
+    const sessionIds = workspace.sessionIds.filter((sessionId) => !archivedSessionIds.has(String(sessionId)));
+    return Promise.all(sessionIds.map(async (sessionId) => {
       const title = await this.ctx.sessionQuery.readTitle(sessionId);
       return { id: String(sessionId), title: title?.title ?? String(sessionId), status: this.liveStatus(String(sessionId)) };
     }));

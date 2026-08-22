@@ -32,7 +32,7 @@ Telegram accepts private-chat updates from its numeric allowlist. QQ accepts C2C
 messages only when the sender OpenID is in its string allowlist. QQ C2C input uses
 `msg_type: 6`. Unlike Telegram, QQ does not continuously edit one progress message:
 current-stage progress is sent as separate text messages throttled by
-`qqProgressIntervalMs`, and the final result is sent as another message. This is an
+`qqProgressIntervalMs`, and the final result is sent as another message. QQ emits only the turn process node; tool names, tool results, and repeated `Working...` notices are omitted. This is an
 expected Telegram/QQ transport difference. Both channels expose text commands,
 session selection, Agent preset creation, stop, and selected-session progress relay
 through the shared control plane.

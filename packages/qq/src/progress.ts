@@ -60,13 +60,8 @@ export class QQProgressReporter {
 }
 
 function renderStage(progress: TurnProgress): string | undefined {
-  switch (progress.type) {
-    case "turn-start": return "Running turn " + String(progress.turn) + "...";
-    case "tool-start": return "Using tool: " + progress.name;
-    case "tool-end": return (progress.failed ? "Tool failed: " : "Tool completed: ") + progress.name;
-    case "assistant-message": return "Working...";
-    default: return undefined;
-  }
+  // QQ cannot edit a prior message, so tool names and repeated working notices only add noise.
+  return progress.type === "turn-start" ? "Running turn " + String(progress.turn) + "..." : undefined;
 }
 function splitText(text: string, maxChars: number): readonly string[] { const chars = Array.from(text || "Completed."); const result: string[] = []; for (let i = 0; i < chars.length; i += maxChars) result.push(chars.slice(i, i + maxChars).join("")); return result; }
 function isExpiredReply(error: unknown): boolean { return error instanceof QQApiError && (String(error.code) === "40034005" || String(error.code) === "40034024"); }

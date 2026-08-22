@@ -4,7 +4,7 @@ import { QQProgressReporter } from "./progress.js";
 import { QQApiError, type QQC2CMessage, type QQGatewayPayload } from "./types.js";
 import type { QQGatewayConnection } from "./websocket.js";
 
-interface NumberedMenu { readonly actorId: string; readonly expiresAt: number; readonly callbacks: readonly string[]; }
+interface NumberedMenu { readonly actorId: string; readonly expiresAt: number; readonly buttons: readonly { readonly text: string; readonly callbackData: string }[]; }
 export interface QQC2CChannelOptions {
   readonly control: DshControlPlane;
   readonly api: QQOpenApiClient;
@@ -57,20 +57,23 @@ export class QQC2CChannel {
       }
       return;
     }
-    const choice = /^\d+$/u.test(message.content) ? Number(message.content) : undefined;
+    const normalized = message.content.trim().toLowerCase();
+    const menuInput = normalized.startsWith("/") ? normalized.slice(1) : normalized;
+    const choice = /^\d+$/u.test(normalized) ? Number(normalized) : undefined;
+    const shortcut = menuInput === "back" || menuInput === "b" ? "back" : menuInput === "refresh" || menuInput === "r" ? "refresh" : undefined;
     const menu = this.menus.get(message.userOpenId);
-    if (choice !== undefined && menu !== undefined) {
+    if ((choice !== undefined || shortcut !== undefined) && menu !== undefined) {
       if (menu.expiresAt <= this.now() || menu.actorId !== message.userOpenId) {
         this.menus.delete(message.userOpenId);
         await this.sendParts(message.userOpenId, "This menu expired. Send /menu again.", message.id);
         return;
       }
-      const data = menu.callbacks[choice - 1];
-      if (data === undefined) {
-        await this.sendParts(message.userOpenId, "Unknown menu option. Send a listed number or /menu.", message.id);
+      const button = shortcut === undefined ? menu.buttons[(choice ?? 0) - 1] : menu.buttons.find((item) => item.text.trim().toLowerCase() === shortcut);
+      if (button === undefined) {
+        await this.sendParts(message.userOpenId, shortcut === undefined ? "Unknown menu option. Send a listed number, /back, or /refresh." : "That menu has no " + shortcut + " action. Send /menu.", message.id);
         return;
       }
-      const result = await this.options.control.handleCallback({ updateId: message.dedupeKey + ":choice", actorId: message.userOpenId, conversationId: message.userOpenId, data });
+      const result = await this.options.control.handleCallback({ updateId: message.dedupeKey + ":choice:" + (shortcut ?? String(choice)), actorId: message.userOpenId, conversationId: message.userOpenId, data: button.callbackData });
       if (this.disposed) return;
       if (result.view !== undefined) await this.sendReply(message, result.view); else await this.sendParts(message.userOpenId, result.answer, message.id);
       return;
@@ -91,10 +94,10 @@ export class QQC2CChannel {
   private async sendReply(message: QQC2CMessage, reply: ControlReply): Promise<void> {
     if (this.disposed) return;
     if (typeof reply === "string") { await this.sendParts(message.userOpenId, reply, message.id); return; }
-    const callbacks = reply.rows.flat().map((button) => button.callbackData);
-    this.menus.set(message.userOpenId, { actorId: message.userOpenId, callbacks, expiresAt: this.now() + this.menuTtlMs });
-    const lines = reply.rows.flat().map((button, index) => String(index + 1) + ". " + button.text);
-    await this.sendParts(message.userOpenId, [reply.text, "", ...lines].join("\n"), message.id);
+    const buttons = reply.rows.flat().map((button) => ({ text: button.text, callbackData: button.callbackData }));
+    this.menus.set(message.userOpenId, { actorId: message.userOpenId, buttons, expiresAt: this.now() + this.menuTtlMs });
+    const lines = buttons.map((button, index) => String(index + 1) + ". " + button.text);
+    await this.sendParts(message.userOpenId, [reply.text, "", ...lines, "", "Reply with a number, /back, or /refresh."].join("\n"), message.id);
   }
 
   private async sendParts(userOpenId: string, text: string, msgId?: string): Promise<void> {

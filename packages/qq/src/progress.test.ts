@@ -25,8 +25,7 @@ describe("QQProgressReporter", () => {
     expect(api.values).toEqual([
       { kind: "input:1" },
       { kind: "text", content: "Running turn 1...", context: { msgId: "m1", msgSeq: 2 } },
-      { kind: "text", content: "Tool completed: read", context: { msgId: "m1", msgSeq: 3 } },
-      { kind: "text", content: "answer", context: { msgId: "m1", msgSeq: 4 } }
+      { kind: "text", content: "answer", context: { msgId: "m1", msgSeq: 3 } }
     ]);
   });
   it("splits long Unicode final output without forwarding private progress types", async () => {

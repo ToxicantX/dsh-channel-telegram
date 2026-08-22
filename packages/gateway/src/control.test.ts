@@ -49,6 +49,16 @@ function menu(value: unknown): MenuView { return value as MenuView; }
 function tokens(): CallbackTokenStore { let value = 0; return new CallbackTokenStore({ token: () => "t" + String(++value) }); }
 
 describe("DshControlPlane", () => {
+  it("rejects direct use of a session omitted by the shared archive filter", async () => {
+    const port = new FakePort();
+    const control = new DshControlPlane(port, {});
+    await control.handle(text("1", "openid-A", "c2c-A", "/use computer local"));
+    await control.handle(text("2", "openid-A", "c2c-A", "/use project p1"));
+    expect(await control.handle(text("3", "openid-A", "c2c-A", "/use session archived-session"))).toEqual(["Unknown session for the selected project."]);
+    expect(await control.handle(text("4", "openid-A", "c2c-A", "hello"))).toEqual(["Select a session from /menu."]);
+    expect(port.sends).toEqual([]);
+  });
+
   it("keeps nonnumeric actors and conversations isolated", async () => {
     const port = new FakePort();
     const control = new DshControlPlane(port, {});

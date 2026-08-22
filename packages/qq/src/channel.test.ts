@@ -48,7 +48,9 @@ describe("QQC2CChannel", () => {
   it("renders numbered menus and resolves choices through opaque callbacks", async () => {
     const api = new Api(); const channel = new QQC2CChannel({ control: new DshControlPlane(new Port(), {}), api: api as unknown as QQOpenApiClient, allowedOpenIds: ["openid-A"] });
     await channel.handleMessage(message("m1", "/computers")); expect(api.sent[0]?.content).toContain("1. Local (online)");
-    await channel.handleMessage(message("m2", "1")); expect(api.sent[1]?.content).toContain("Select a project"); expect(api.sent[1]?.context).toEqual({ msgId: "m2", msgSeq: 1 }); channel.dispose();
+    await channel.handleMessage(message("m2", "1")); expect(api.sent[1]?.content).toContain("Select a project"); expect(api.sent[1]?.content).toContain("/back"); expect(api.sent[1]?.context).toEqual({ msgId: "m2", msgSeq: 1 });
+    await channel.handleMessage(message("m3", "b")); expect(api.sent[2]?.content).toContain("Select a computer");
+    await channel.handleMessage(message("m4", "1")); await channel.handleMessage(message("m5", "/refresh")); expect(api.sent.at(-1)?.content).toContain("Select a project"); channel.dispose();
   });
   it("does not treat an out-of-range number as DSH text and ignores duplicate events", async () => {
     const port = new Port(); const api = new Api(); const channel = new QQC2CChannel({ control: new DshControlPlane(port, {}), api: api as unknown as QQOpenApiClient, allowedOpenIds: ["openid-A"] });

@@ -6,7 +6,7 @@ Unauthorized messages are ignored by default. Hosts may temporarily set `identit
 
 ## Delivery behavior
 
-QQ C2C input uses `msg_type: 6`. Unlike Telegram, QQ does not continuously edit one progress message. Current-stage progress is sent as separate text messages throttled by the host setting `qqProgressIntervalMs`, and the final result is sent as another message. This is an expected Telegram/QQ transport difference.
+QQ C2C input uses `msg_type: 6`. Unlike Telegram, QQ does not continuously edit one progress message. Current-stage progress is sent as separate text messages throttled by the host setting `qqProgressIntervalMs`, and the final result is sent as another message. QQ emits only the turn process node; tool names, tool results, and repeated `Working...` notices are omitted. This is an expected Telegram/QQ transport difference.
 
 ## 0.3.0 Release
 

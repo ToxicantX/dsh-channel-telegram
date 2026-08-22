@@ -65,8 +65,9 @@ keyboards are not required. The `C2C_MESSAGE_CREATE` OpenID must appear in the
 allowlist before any DSH action is performed. QQ C2C input uses `msg_type: 6`. Unlike
 Telegram, QQ does not continuously edit one progress message: current-stage progress
 is sent as separate text messages throttled by `qqProgressIntervalMs`, and the final
-result is sent as another message. This is an expected Telegram/QQ transport
-difference.
+result is sent as another message. QQ emits only the turn process node; tool names,
+tool results, and repeated `Working...` notices are omitted. This is an expected
+Telegram/QQ transport difference.
 
 Never place either bot secret in composition configuration, repository files, logs, or
 normal settings. Telegram uses `TELEGRAM_BOT_TOKEN`; QQ uses
