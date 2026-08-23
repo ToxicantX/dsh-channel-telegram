@@ -75,6 +75,7 @@ describe("createTelegramBot", () => {
     const commandCall = calls.findLast((call) => call.method === "setMyCommands")!;
     expect(commandCall.payload.scope).toEqual({ type: "all_private_chats" });
     expect(commandCall.payload.commands).toEqual(expect.arrayContaining([expect.objectContaining({ command: "start" }), expect.objectContaining({ command: "sessions" })]));
+    expect(commandCall.payload.commands).toEqual(expect.arrayContaining([expect.objectContaining({ command: "menu", description: "显示当前目标和选择菜单" })]));
 
     await bot.handleUpdate(messageUpdate(1, "/start"));
     const menuCall = calls.findLast((call) => call.method === "sendMessage")!;
@@ -101,7 +102,7 @@ describe("createTelegramBot", () => {
     edit = calls.findLast((call) => call.method === "editMessageText")!;
     await bot.handleUpdate(callbackUpdate(5, firstCallback(edit.payload)));
     edit = calls.findLast((call) => call.method === "editMessageText")!;
-    expect(String(edit.payload.text)).toContain("Session: s1");
+    expect(String(edit.payload.text)).toContain("会话：s1");
 
     const beforeExternalTurn = calls.length;
     port.emit({ type: "turn-start", sessionId: "s1", turn: 8 });

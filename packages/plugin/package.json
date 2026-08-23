@@ -1,10 +1,10 @@
 {
   "name": "dsh-channel-telegram",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "publishConfig": { "access": "public" },
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/ToxicantX/dsh-channel-telegram.git", "directory": "packages/plugin" },
-  "description": "Telegram and QQ Official Bot Host plugin for DeepSeek Harness",
+  "description": "Telegram, QQ Official Bot, and experimental WeChat iLink Host plugin for DeepSeek Harness",
   "type": "module",
   "main": "lib/index.js",
   "types": "lib/index.d.ts",
@@ -34,8 +34,10 @@
   },
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.1",
-    "@wsxcant/dsh-channel-qq": "0.1.0",
-    "@wsxcant/dsh-channel-telegram-gateway": "0.2.2"
+    "qrcode": "^1.5.4",
+    "@wsxcant/dsh-channel-qq": "0.2.0",
+    "@wsxcant/dsh-channel-wechat": "0.1.0",
+    "@wsxcant/dsh-channel-telegram-gateway": "0.3.0"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
@@ -47,6 +49,7 @@
     "@deepseek-ai/dsh-session": ">=0.1.0-rc.8 <0.2.0",
     "@deepseek-ai/dsh-session-query": ">=0.1.0-rc.8 <0.2.0",
     "@deepseek-ai/dsh-settings": ">=0.1.0-rc.8 <0.2.0",
+    "@deepseek-ai/dsh-client-connection": ">=0.1.1-rc.1 <0.2.0",
     "@deepseek-ai/dsh-workspace": ">=0.1.0-rc.8 <0.2.0"
   },
   "devDependencies": {
@@ -65,6 +68,7 @@
     "@deepseek-ai/dsh-session-query": "0.1.0-rc.8",
     "@deepseek-ai/dsh-settings": "0.1.0-rc.8",
     "@deepseek-ai/dsh-workspace": "0.1.0-rc.8",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "~18.3.1",
     "react": "^18.2.0",
     "tsdown": "^0.19.0"

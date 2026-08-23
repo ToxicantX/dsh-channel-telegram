@@ -89,7 +89,7 @@ describe("QQGatewayConnection", () => {
     const running = connection.run(abort.signal, async (message) => { handled.push(message.dedupeKey); await new Promise<void>((resolve) => { release = resolve; }); });
     await flush(); const first = sockets[0]!;
     first.emit({ op: 10, d: { heartbeat_interval: 45000 } });
-    expect(first.sent[0]).toEqual(expect.objectContaining({ op: 2, d: expect.objectContaining({ token: "QQBot access", intents: 1 << 25, shard: [0, 1] }) }));
+    expect(first.sent[0]).toEqual(expect.objectContaining({ op: 2, d: expect.objectContaining({ token: "QQBot access", intents: (1 << 25) | (1 << 26), shard: [0, 1] }) }));
     first.emit({ op: 0, s: 1, t: "READY", d: { session_id: "session-one" } }); await flush();
     first.emit({ op: 0, s: 2, t: "C2C_MESSAGE_CREATE", d: { id: "m1", author: { user_openid: "openid" }, content: "hello", message_scene: { ext: ["msg_idx=1"] } } });
     await Promise.resolve(); intervals[0]?.(); expect(first.sent.at(-1)).toEqual({ op: 1, d: 1 });
@@ -97,6 +97,21 @@ describe("QQGatewayConnection", () => {
     first.close(4009); await flush(); const second = sockets[1]!; second.emit({ op: 10, d: { heartbeat_interval: 45000 } });
     expect(second.sent[0]).toEqual({ op: 6, d: { token: "QQBot access", session_id: "session-one", seq: 2 } });
     expect(handled).toEqual(["m1:1"]); abort.abort(); await running;
+  });
+
+  it("dispatches C2C button interactions and advances seq after processing", async () => {
+    const { connection, sockets, intervals } = dependencies(); const abort = new AbortController();
+    const interactions: string[] = [];
+    const running = connection.run(abort.signal, () => undefined, async (interaction) => { interactions.push(interaction.data); });
+    await flush(); const socket = sockets[0]!;
+    socket.emit({ op: 10, d: { heartbeat_interval: 45000 } });
+    socket.emit({ op: 0, s: 1, t: "READY", d: { session_id: "session-one" } }); await flush();
+    socket.emit({ op: 0, s: 2, t: "INTERACTION_CREATE", d: { id: "interaction-1", chat_type: 2, scene: "c2c", user_openid: "openid", data: { resolved: { button_data: "m:token", button_id: "button-1" } } } });
+    await flush();
+    intervals[0]?.();
+    expect(interactions).toEqual(["m:token"]);
+    expect(socket.sent.at(-1)).toEqual({ op: 1, d: 2 });
+    abort.abort(); await running;
   });
 
   it("times out missing heartbeat ACK then resumes, and identifies after invalid session", async () => {

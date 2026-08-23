@@ -129,27 +129,27 @@ export class DshControlPlane {
       case "/sessions": return [await this.sessionsEntry(actorId, conversationId)];
       case "/use": return [await this.use(actorId, conversationId, args)];
       case "/new": return [await this.create(actorId, conversationId)];
-      case "/status": return [await this.rootMenu(actorId, conversationId)];
+      case "/status": return [await this.statusMenu(actorId, conversationId)];
       case "/stop": return [await this.stop(actorId, conversationId)];
-      default: return ["Commands: /start /menu /computers /projects /sessions /use /new /status /stop"];
+      default: return ["可用命令：/start /menu /computers /projects /sessions /use /new /status /stop"];
     }
   }
 
   async handleCallback(update: ControlCallbackUpdate): Promise<ControlCallbackResult> {
-    if (this.disposed) return { answer: "This menu expired. Run /menu again." };
+    if (this.disposed) return { answer: "菜单已过期，请重新发送 /menu。" };
     const actorId = String(update.actorId);
     const conversationId = String(update.conversationId);
     const updateId = String(update.updateId);
-    if (!this.seen.addIfNew(this.idempotencyKey("callback", actorId, conversationId, updateId))) return { answer: "Already handled." };
+    if (!this.seen.addIfNew(this.idempotencyKey("callback", actorId, conversationId, updateId))) return { answer: "该操作已处理。" };
     const key = this.selectionKey(actorId, conversationId);
     return this.conversationQueues.run(key, async () => {
-      if (this.disposed) return { answer: "This menu expired. Run /menu again." };
+      if (this.disposed) return { answer: "菜单已过期，请重新发送 /menu。" };
       const action = this.callbacks.consume(update.data, actorId, conversationId);
-      if (action === undefined) return { answer: "This menu expired. Run /menu again." };
+      if (action === undefined) return { answer: "菜单已过期，请重新发送 /menu。" };
       try {
         return await this.applyMenuAction(actorId, conversationId, action);
       } catch {
-        return { answer: "Unable to refresh this menu." };
+        return { answer: "无法刷新此菜单。" };
       }
     });
   }
@@ -224,75 +224,82 @@ export class DshControlPlane {
   private async applyMenuAction(actorId: string, conversationId: string, action: MenuAction): Promise<ControlCallbackResult> {
     const selected = this.selection(actorId, conversationId);
     switch (action.type) {
-      case "root": return { answer: "Refreshed.", view: await this.rootMenu(actorId, conversationId) };
-      case "computers": return { answer: "Computers", view: await this.computersMenu(actorId, conversationId, action.page) };
+      case "root": return { answer: "已刷新。", view: await this.rootMenu(actorId, conversationId) };
+      case "status": return { answer: "状态", view: await this.statusMenu(actorId, conversationId) };
+      case "computers": return { answer: "主机", view: await this.computersMenu(actorId, conversationId, action.page) };
       case "select-computer": {
         const computer = (await this.dsh.listComputers()).find((item) => item.id === action.computerId && item.status === "online");
-        if (computer === undefined) return { answer: "Computer is offline or missing." };
+        if (computer === undefined) return { answer: "主机已离线或不存在。" };
         selected.computerId = computer.id;
         selected.projectId = undefined;
         this.setSession(actorId, conversationId, selected, undefined);
-        return { answer: "Computer selected.", view: await this.projectsMenu(actorId, conversationId, computer.id, 0) };
+        return { answer: "已选择主机。", view: await this.projectsMenu(actorId, conversationId, computer.id, 0) };
       }
       case "projects": {
-        if (selected.computerId !== action.computerId) return { answer: "Computer selection changed." };
-        return { answer: "Projects", view: await this.projectsMenu(actorId, conversationId, action.computerId, action.page) };
+        if (selected.computerId !== action.computerId) return { answer: "所选主机已变更。" };
+        return { answer: "项目", view: await this.projectsMenu(actorId, conversationId, action.computerId, action.page) };
       }
       case "select-project": {
-        if (selected.computerId !== action.computerId) return { answer: "Computer selection changed." };
+        if (selected.computerId !== action.computerId) return { answer: "所选主机已变更。" };
         const project = (await this.dsh.listProjects(action.computerId)).find((item) => item.id === action.projectId);
-        if (project === undefined || project.status !== "online") return { answer: "Project is no longer available." };
+        if (project === undefined || project.status !== "online") return { answer: "项目已不可用。" };
         selected.projectId = project.id;
         this.setSession(actorId, conversationId, selected, undefined);
-        return { answer: "Project selected.", view: await this.sessionsMenu(actorId, conversationId, action.computerId, project.id, 0) };
+        return { answer: "已选择项目。", view: await this.sessionsMenu(actorId, conversationId, action.computerId, project.id, 0) };
       }
       case "sessions": {
-        if (selected.computerId !== action.computerId || selected.projectId !== action.projectId) return { answer: "Project selection changed." };
-        return { answer: "Sessions", view: await this.sessionsMenu(actorId, conversationId, action.computerId, action.projectId, action.page) };
+        if (selected.computerId !== action.computerId || selected.projectId !== action.projectId) return { answer: "所选项目已变更。" };
+        return { answer: "会话", view: await this.sessionsMenu(actorId, conversationId, action.computerId, action.projectId, action.page) };
       }
       case "select-session": {
-        if (selected.computerId !== action.computerId || selected.projectId !== action.projectId) return { answer: "Project selection changed." };
+        if (selected.computerId !== action.computerId || selected.projectId !== action.projectId) return { answer: "所选项目已变更。" };
         const session = (await this.dsh.listSessions(action.computerId, action.projectId)).find((item) => item.id === action.sessionId);
-        if (session === undefined) return { answer: "Session is no longer available." };
+        if (session === undefined) return { answer: "会话已不可用。" };
         this.setSession(actorId, conversationId, selected, session.id);
-        return { answer: "Session selected.", view: await this.rootMenu(actorId, conversationId) };
+        return { answer: "已选择会话。", view: await this.statusMenu(actorId, conversationId) };
       }
       case "presets": {
-        if (selected.computerId !== action.computerId || selected.projectId !== action.projectId) return { answer: "Project selection changed." };
-        return { answer: "Presets", view: await this.presetsMenu(actorId, conversationId, action.computerId, action.projectId, action.page) };
+        if (selected.computerId !== action.computerId || selected.projectId !== action.projectId) return { answer: "所选项目已变更。" };
+        return { answer: "Agent 预设", view: await this.presetsMenu(actorId, conversationId, action.computerId, action.projectId, action.page) };
       }
       case "create-session": {
-        if (selected.computerId !== action.computerId || selected.projectId !== action.projectId) return { answer: "Project selection changed." };
+        if (selected.computerId !== action.computerId || selected.projectId !== action.projectId) return { answer: "所选项目已变更。" };
         const computer = (await this.dsh.listComputers()).find((item) => item.id === action.computerId && item.status === "online");
-        if (computer === undefined) return { answer: "Computer is offline or missing." };
+        if (computer === undefined) return { answer: "主机已离线或不存在。" };
         const project = (await this.dsh.listProjects(action.computerId)).find((item) => item.id === action.projectId);
-        if (project === undefined || project.status !== "online") return { answer: "Project is no longer available." };
+        if (project === undefined || project.status !== "online") return { answer: "项目已不可用。" };
         const preset = (await this.dsh.listAgentPresets()).find((item) => item.id === action.presetId);
-        if (preset === undefined) return { answer: "Preset is no longer available." };
+        if (preset === undefined) return { answer: "Agent 预设已不可用。" };
         const session = await this.dsh.createSession(action.computerId, action.projectId, preset.id);
         this.setSession(actorId, conversationId, selected, session.id);
-        return { answer: "Session created.", view: await this.rootMenu(actorId, conversationId) };
+        return { answer: "会话已创建。", view: await this.statusMenu(actorId, conversationId) };
       }
     }
   }
 
   private async rootMenu(actorId: string, conversationId: string): Promise<MenuView> {
     const selected = this.selection(actorId, conversationId);
-    const status = selected.sessionId === undefined ? "not selected" : await this.dsh.status(selected.sessionId);
+    const rows = [[this.issue(actorId, conversationId, "主机", { type: "computers", page: 0 })]];
+    if (selected.computerId !== undefined) rows.push([this.issue(actorId, conversationId, "项目", { type: "projects", computerId: selected.computerId, page: 0 })]);
+    if (selected.computerId !== undefined && selected.projectId !== undefined) {
+      rows.push([this.issue(actorId, conversationId, "会话", { type: "sessions", computerId: selected.computerId, projectId: selected.projectId, page: 0 })]);
+      rows.push([this.issue(actorId, conversationId, "新建会话", { type: "presets", computerId: selected.computerId, projectId: selected.projectId, page: 0 })]);
+    }
+    rows.push([this.issue(actorId, conversationId, "状态", { type: "status" }), this.issue(actorId, conversationId, "刷新", { type: "root" })]);
+    return { text: "请选择操作", rows };
+  }
+
+  private async statusMenu(actorId: string, conversationId: string): Promise<MenuView> {
+    const selected = this.selection(actorId, conversationId);
+    const status = selected.sessionId === undefined ? "未选择" : await this.dsh.status(selected.sessionId);
     const text = [
-      "Current target",
-      "Computer: " + (selected.computerId ?? "not selected"),
-      "Project: " + (selected.projectId ?? "not selected"),
-      "Session: " + (selected.sessionId ?? "not selected"),
-      "Status: " + status
+      "当前选择",
+      "主机：" + (selected.computerId ?? "未选择"),
+      "项目：" + (selected.projectId ?? "未选择"),
+      "会话：" + (selected.sessionId ?? "未选择"),
+      "状态：" + status
     ].join("\n");
-    return { text, rows: [
-      [this.issue(actorId, conversationId, "Computers", { type: "computers", page: 0 })],
-      [this.issue(actorId, conversationId, "Projects", selected.computerId === undefined ? { type: "computers", page: 0 } : { type: "projects", computerId: selected.computerId, page: 0 })],
-      [this.issue(actorId, conversationId, "Sessions", selected.computerId === undefined ? { type: "computers", page: 0 } : selected.projectId === undefined ? { type: "projects", computerId: selected.computerId, page: 0 } : { type: "sessions", computerId: selected.computerId, projectId: selected.projectId, page: 0 })],
-      [this.issue(actorId, conversationId, "New session", selected.computerId === undefined ? { type: "computers", page: 0 } : selected.projectId === undefined ? { type: "projects", computerId: selected.computerId, page: 0 } : { type: "presets", computerId: selected.computerId, projectId: selected.projectId, page: 0 })],
-      [this.issue(actorId, conversationId, "Refresh", { type: "root" })]
-    ] };
+    return { text, rows: [[this.issue(actorId, conversationId, "返回", { type: "root" }), this.issue(actorId, conversationId, "刷新", { type: "status" })]] };
   }
 
   private async computersMenu(actorId: string, conversationId: string, page: number): Promise<MenuView> {
@@ -300,8 +307,8 @@ export class DshControlPlane {
     const values = paginate(await this.dsh.listComputers(), page, this.pageSize);
     const rows = values.items.map((item) => [this.issue(actorId, conversationId, (selected.computerId === item.id ? "* " : "") + compact(item.title, 40) + " (" + item.status + ")", { type: "select-computer", computerId: item.id })]);
     rows.push(this.navigation(actorId, conversationId, values.page, values.pages, (next) => ({ type: "computers", page: next })));
-    rows.push([this.issue(actorId, conversationId, "Back", { type: "root" }), this.issue(actorId, conversationId, "Refresh", { type: "computers", page: values.page })]);
-    return { text: "Select a computer (page " + String(values.page + 1) + "/" + String(values.pages) + ")", rows };
+    rows.push([this.issue(actorId, conversationId, "返回", { type: "root" }), this.issue(actorId, conversationId, "刷新", { type: "computers", page: values.page })]);
+    return { text: "选择主机（第 " + String(values.page + 1) + "/" + String(values.pages) + " 页）", rows };
   }
 
   private async projectsEntry(actorId: string, conversationId: string): Promise<MenuView> {
@@ -314,8 +321,8 @@ export class DshControlPlane {
     const values = paginate(await this.dsh.listProjects(computerId), page, this.pageSize);
     const rows = values.items.map((item) => [this.issue(actorId, conversationId, (selected.projectId === item.id ? "* " : "") + compact(item.title, 40) + " (" + item.status + ")", { type: "select-project", computerId, projectId: item.id })]);
     rows.push(this.navigation(actorId, conversationId, values.page, values.pages, (next) => ({ type: "projects", computerId, page: next })));
-    rows.push([this.issue(actorId, conversationId, "Back", { type: "computers", page: 0 }), this.issue(actorId, conversationId, "Refresh", { type: "projects", computerId, page: values.page })]);
-    return { text: "Select a project (page " + String(values.page + 1) + "/" + String(values.pages) + ")", rows };
+    rows.push([this.issue(actorId, conversationId, "返回", { type: "computers", page: 0 }), this.issue(actorId, conversationId, "刷新", { type: "projects", computerId, page: values.page })]);
+    return { text: "选择项目（第 " + String(values.page + 1) + "/" + String(values.pages) + " 页）", rows };
   }
 
   private async sessionsEntry(actorId: string, conversationId: string): Promise<MenuView> {
@@ -330,8 +337,8 @@ export class DshControlPlane {
     const values = paginate(await this.dsh.listSessions(computerId, projectId), page, this.pageSize);
     const rows = values.items.map((item) => [this.issue(actorId, conversationId, (selected.sessionId === item.id ? "* " : "") + compact(item.title, 40) + " (" + item.status + ")", { type: "select-session", computerId, projectId, sessionId: item.id })]);
     rows.push(this.navigation(actorId, conversationId, values.page, values.pages, (next) => ({ type: "sessions", computerId, projectId, page: next })));
-    rows.push([this.issue(actorId, conversationId, "Back", { type: "projects", computerId, page: 0 }), this.issue(actorId, conversationId, "Refresh", { type: "sessions", computerId, projectId, page: values.page })]);
-    return { text: "Select a session (page " + String(values.page + 1) + "/" + String(values.pages) + ")", rows };
+    rows.push([this.issue(actorId, conversationId, "返回", { type: "projects", computerId, page: 0 }), this.issue(actorId, conversationId, "刷新", { type: "sessions", computerId, projectId, page: values.page })]);
+    return { text: "选择会话（第 " + String(values.page + 1) + "/" + String(values.pages) + " 页）", rows };
   }
 
   private async presetsMenu(actorId: string, conversationId: string, computerId: string, projectId: string, page: number): Promise<MenuView> {
@@ -341,17 +348,17 @@ export class DshControlPlane {
       return [this.issue(actorId, conversationId, mark + compact(item.title, 40), { type: "create-session", computerId, projectId, presetId: item.id })];
     });
     rows.push(this.navigation(actorId, conversationId, values.page, values.pages, (next) => ({ type: "presets", computerId, projectId, page: next })));
-    rows.push([this.issue(actorId, conversationId, "Back", { type: "root" }), this.issue(actorId, conversationId, "Refresh", { type: "presets", computerId, projectId, page: values.page })]);
+    rows.push([this.issue(actorId, conversationId, "返回", { type: "root" }), this.issue(actorId, conversationId, "刷新", { type: "presets", computerId, projectId, page: values.page })]);
     const text = values.items.length === 0
-      ? "No available Agent presets."
-      : "Select an Agent preset (page " + String(values.page + 1) + "/" + String(values.pages) + ")";
+      ? "没有可用的 Agent 预设。"
+      : "选择 Agent 预设（第 " + String(values.page + 1) + "/" + String(values.pages) + " 页）";
     return { text, rows };
   }
 
   private navigation(actorId: string, conversationId: string, page: number, pages: number, action: (page: number) => MenuAction) {
     const row = [];
-    if (page > 0) row.push(this.issue(actorId, conversationId, "Previous", action(page - 1)));
-    if (page + 1 < pages) row.push(this.issue(actorId, conversationId, "Next", action(page + 1)));
+    if (page > 0) row.push(this.issue(actorId, conversationId, "上一页", action(page - 1)));
+    if (page + 1 < pages) row.push(this.issue(actorId, conversationId, "下一页", action(page + 1)));
     return row;
   }
 
@@ -359,44 +366,44 @@ export class DshControlPlane {
     const [kind, id] = args;
     const selected = this.selection(actorId, conversationId);
     if (kind === "computer" && id !== undefined) {
-      if (!(await this.dsh.listComputers()).some((item) => item.id === id && item.status === "online")) return "Unknown computer.";
+      if (!(await this.dsh.listComputers()).some((item) => item.id === id && item.status === "online")) return "未知主机。";
       selected.computerId = id; selected.projectId = undefined;
       this.setSession(actorId, conversationId, selected, undefined);
-      return "Computer selected: " + id;
+      return "已选择主机：" + id;
     }
     if (kind === "project" && id !== undefined) {
-      if (selected.computerId === undefined) return "Select a computer first.";
-      if (!(await this.dsh.listProjects(selected.computerId)).some((item) => item.id === id && item.status === "online")) return "Unknown project.";
+      if (selected.computerId === undefined) return "请先选择主机。";
+      if (!(await this.dsh.listProjects(selected.computerId)).some((item) => item.id === id && item.status === "online")) return "未知项目。";
       selected.projectId = id;
       this.setSession(actorId, conversationId, selected, undefined);
-      return "Project selected: " + id;
+      return "已选择项目：" + id;
     }
     if (kind === "session" && id !== undefined) {
-      if (selected.computerId === undefined || selected.projectId === undefined) return "Select a computer and project first.";
-      if (!(await this.dsh.listSessions(selected.computerId, selected.projectId)).some((item) => item.id === id)) return "Unknown session for the selected project.";
+      if (selected.computerId === undefined || selected.projectId === undefined) return "请先选择主机和项目。";
+      if (!(await this.dsh.listSessions(selected.computerId, selected.projectId)).some((item) => item.id === id)) return "所选项目中没有此会话。";
       this.setSession(actorId, conversationId, selected, id);
-      return "Session selected: " + id;
+      return "已选择会话：" + id;
     }
-    return "Usage: /use computer <id>, /use project <id>, or /use session <id>.";
+    return "用法：/use computer <id>、/use project <id> 或 /use session <id>。";
   }
 
   private async create(actorId: string, conversationId: string): Promise<ControlReply> {
     const selected = this.selection(actorId, conversationId);
-    if (selected.computerId === undefined || selected.projectId === undefined) return "Select a computer and project first.";
+    if (selected.computerId === undefined || selected.projectId === undefined) return "请先选择主机和项目。";
     const project = (await this.dsh.listProjects(selected.computerId)).find((item) => item.id === selected.projectId);
-    if (project === undefined || project.status !== "online") return "Project is no longer available.";
+    if (project === undefined || project.status !== "online") return "项目已不可用。";
     return this.presetsMenu(actorId, conversationId, selected.computerId, selected.projectId, 0);
   }
 
   private async stop(actorId: string, conversationId: string): Promise<string> {
     const sessionId = this.selection(actorId, conversationId).sessionId;
-    if (sessionId === undefined) return "No session selected.";
-    return (await this.dsh.stop(sessionId)) ? "Stop requested; queued work was preserved." : "No live turn to stop.";
+    if (sessionId === undefined) return "尚未选择会话。";
+    return (await this.dsh.stop(sessionId)) ? "已请求停止；排队中的工作已保留。" : "没有正在运行的任务可停止。";
   }
 
   private async sendText(actorId: string, conversationId: string, text: string, onProgress?: ControlProgressListener): Promise<string | undefined> {
     const sessionId = this.selection(actorId, conversationId).sessionId;
-    if (sessionId === undefined) return "Select a session from /menu.";
+    if (sessionId === undefined) return "请从 /menu 选择会话。";
     const key = this.selectionKey(actorId, conversationId);
     let progressTail = Promise.resolve();
     const emit = onProgress === undefined ? undefined : (progress: TurnProgress) => {
@@ -415,14 +422,14 @@ export class DshControlPlane {
       }));
       await progressTail;
       if (onProgress !== undefined) return undefined;
-      return result.text !== "" ? result.text : "Turn " + String(result.turn) + " ended: " + result.reason + ".";
+      return result.text !== "" ? result.text : "第 " + String(result.turn) + " 轮已结束：" + result.reason + "。";
     } catch {
       if (emit !== undefined) {
-        emit({ type: "failed", sessionId, message: "DSH request failed." });
+        emit({ type: "failed", sessionId, message: "DSH 请求失败。" });
         await progressTail;
         return undefined;
       }
-      return "DSH request failed.";
+      return "DSH 请求失败。";
     }
   }
 }

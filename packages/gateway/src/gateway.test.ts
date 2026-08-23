@@ -96,8 +96,8 @@ describe("TelegramGateway", () => {
     const sessionsResult = await gateway.handleCallback(callback(3, projects.rows[0]![0]!.callbackData));
     const sessions = menu(sessionsResult.view);
     const selected = await gateway.handleCallback(callback(4, sessions.rows[0]![0]!.callbackData));
-    expect(selected.answer).toBe("Session selected.");
-    expect(selected.view?.text).toContain("Session: s1");
+    expect(selected.answer).toBe("已选择会话。");
+    expect(selected.view?.text).toContain("会话：s1");
 
     const progress: string[] = [];
     expect(await gateway.handle(update(5, "hello"), (event) => { progress.push(event.type); })).toEqual([]);
@@ -108,9 +108,9 @@ describe("TelegramGateway", () => {
   it("preserves text selection commands and routes only to the selected session", async () => {
     const port = new FakePort();
     const gateway = new TelegramGateway(port, { allowedUserIds: [42] });
-    expect(await gateway.handle(update(1, "/use computer local"))).toEqual(["Computer selected: local"]);
-    expect(await gateway.handle(update(2, "/use project p1"))).toEqual(["Project selected: p1"]);
-    expect(await gateway.handle(update(3, "/use session s1"))).toEqual(["Session selected: s1"]);
+    expect(await gateway.handle(update(1, "/use computer local"))).toEqual(["已选择主机：local"]);
+    expect(await gateway.handle(update(2, "/use project p1"))).toEqual(["已选择项目：p1"]);
+    expect(await gateway.handle(update(3, "/use session s1"))).toEqual(["已选择会话：s1"]);
     expect(await gateway.handle(update(4, "hello"))).toEqual(["reply:hello"]);
     expect(port.sends).toEqual([{ sessionId: "s1", text: "hello" }]);
   });
@@ -122,7 +122,7 @@ describe("TelegramGateway", () => {
     const computers = menu((await gateway.handle(update(1, "/computers")))[0]);
     const firstPage = menu((await gateway.handleCallback(callback(2, computers.rows[0]![0]!.callbackData))).view);
     expect(firstPage.text).toContain("1/2");
-    const next = firstPage.rows.flat().find((button) => button.text === "Next");
+    const next = firstPage.rows.flat().find((button) => button.text === "下一页");
     const secondPage = menu((await gateway.handleCallback(callback(3, next!.callbackData))).view);
     expect(secondPage.text).toContain("2/2");
     expect(secondPage.rows.flat().some((button) => button.text.includes("Project 3"))).toBe(true);
@@ -137,7 +137,7 @@ describe("TelegramGateway", () => {
     const staleProject = localProjects.rows[0]![0]!.callbackData;
     const secondComputers = menu((await gateway.handle(update(3, "/computers")))[0]);
     await gateway.handleCallback(callback(4, secondComputers.rows[1]![0]!.callbackData));
-    expect((await gateway.handleCallback(callback(5, staleProject))).answer).toBe("Computer selection changed.");
+    expect((await gateway.handleCallback(callback(5, staleProject))).answer).toBe("所选主机已变更。");
   });
 
   it("finalizes the Telegram progress stream when DSH rejects the request", async () => {
@@ -167,15 +167,15 @@ describe("TelegramGateway", () => {
     const port = new FakePort();
     port.presets = [1, 2, 3].map((id) => ({ id: "preset" + String(id), title: "Preset " + String(id), isDefault: id === 1 }));
     const gateway = new TelegramGateway(port, { allowedUserIds: [42], pageSize: 2, callbackStore: tokens() });
-    expect(await gateway.handle(update(1, "/new"))).toEqual(["Select a computer and project first."]);
+    expect(await gateway.handle(update(1, "/new"))).toEqual(["请先选择主机和项目。"]);
     await gateway.handle(update(2, "/use computer local"));
     await gateway.handle(update(3, "/use project p1"));
     const firstPage = menu((await gateway.handle(update(4, "/new")))[0]);
-    expect(firstPage.text).toContain("Select an Agent preset");
+    expect(firstPage.text).toContain("选择 Agent 预设");
     expect(firstPage.text).toContain("1/2");
     expect(firstPage.rows.flat().some((button) => button.text.startsWith("* Preset 1"))).toBe(true);
     expect(port.creates).toEqual([]);
-    const next = firstPage.rows.flat().find((button) => button.text === "Next");
+    const next = firstPage.rows.flat().find((button) => button.text === "下一页");
     const secondPage = menu((await gateway.handleCallback(callback(5, next!.callbackData))).view);
     expect(secondPage.text).toContain("2/2");
     expect(secondPage.rows.flat().some((button) => button.text.includes("Preset 3"))).toBe(true);
@@ -188,8 +188,8 @@ describe("TelegramGateway", () => {
     await gateway.handle(update(1, "/use computer local"));
     await gateway.handle(update(2, "/use project p1"));
     const presets = menu((await gateway.handle(update(3, "/new")))[0]);
-    expect(presets.text).toBe("No available Agent presets.");
-    expect(presets.rows.flat().map((button) => button.text)).toEqual(["Back", "Refresh"]);
+    expect(presets.text).toBe("没有可用的 Agent 预设。");
+    expect(presets.rows.flat().map((button) => button.text)).toEqual(["返回", "刷新"]);
     expect(port.creates).toEqual([]);
   });
 
@@ -202,8 +202,8 @@ describe("TelegramGateway", () => {
     const defaultButton = presets.rows.flat().find((button) => button.text.startsWith("* Default agent"));
     expect(defaultButton).toBeDefined();
     const created = await gateway.handleCallback(callback(4, defaultButton!.callbackData));
-    expect(created.answer).toBe("Session created.");
-    expect(created.view?.text).toContain("Session: s2");
+    expect(created.answer).toBe("会话已创建。");
+    expect(created.view?.text).toContain("会话：s2");
     expect(port.creates).toEqual([{ computerId: "local", projectId: "p1", agentPresetId: "default" }]);
   });
 
@@ -216,13 +216,13 @@ describe("TelegramGateway", () => {
     const presets = menu((await gateway.handle(update(3, "/new")))[0]);
     const staleCreate = presets.rows[0]![0]!.callbackData;
     await gateway.handle(update(4, "/use project p2"));
-    expect((await gateway.handleCallback(callback(5, staleCreate))).answer).toBe("Project selection changed.");
+    expect((await gateway.handleCallback(callback(5, staleCreate))).answer).toBe("所选项目已变更。");
 
     await gateway.handle(update(6, "/use project p1"));
     const laterPresets = menu((await gateway.handle(update(7, "/new")))[0]);
     const goneCreate = laterPresets.rows[1]![0]!.callbackData;
     port.presets = port.presets.filter((item) => item.id !== "coder");
-    expect((await gateway.handleCallback(callback(8, goneCreate))).answer).toBe("Preset is no longer available.");
+    expect((await gateway.handleCallback(callback(8, goneCreate))).answer).toBe("Agent 预设已不可用。");
     expect(port.creates).toEqual([]);
   });
 
@@ -301,6 +301,6 @@ describe("TelegramGateway", () => {
     expect(await gateway.handle(update(1, "/menu"))).toHaveLength(1);
     gateway.dispose();
     expect(await gateway.handle(update(2, "/menu"))).toEqual([]);
-    expect(await gateway.handleCallback(callback(3, "m:missing"))).toEqual({ answer: "This menu expired. Run /menu again." });
+    expect(await gateway.handleCallback(callback(3, "m:missing"))).toEqual({ answer: "菜单已过期，请重新发送 /menu。" });
   });
 });

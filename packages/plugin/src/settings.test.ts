@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeQQSettings, normalizeTelegramSettings, runtimeHostName } from "./index.js";
+import { normalizeQQSettings, normalizeTelegramSettings, normalizeWechatSettings, runtimeHostName } from "./index.js";
 
 describe("normalizeTelegramSettings", () => {
   it("trims the host name and deduplicates allowed users", () => {
@@ -29,6 +29,15 @@ describe("normalizeQQSettings", () => {
 
   it.each([999, 60001, 1.5])("rejects invalid progress interval %s", (progressIntervalMs) => {
     expect(() => normalizeQQSettings({ appId: "123", allowedOpenIds: [], progressIntervalMs, openIdLookupEnabled: false })).toThrow(/interval/);
+  });
+});
+
+describe("normalizeWechatSettings", () => {
+  it("trims and deduplicates iLink user IDs", () => {
+    expect(normalizeWechatSettings({ allowedUserIds: [" owner ", "owner", "peer"], identityLookupEnabled: true })).toEqual({ allowedUserIds: ["owner", "peer"], identityLookupEnabled: true });
+  });
+  it("rejects oversized iLink user IDs", () => {
+    expect(() => normalizeWechatSettings({ allowedUserIds: ["x".repeat(129)], identityLookupEnabled: false })).toThrow(/user IDs/u);
   });
 });
 

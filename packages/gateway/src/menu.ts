@@ -12,6 +12,7 @@ export interface MenuView {
 
 export type MenuAction =
   | { readonly type: "root" }
+  | { readonly type: "status" }
   | { readonly type: "computers"; readonly page: number }
   | { readonly type: "select-computer"; readonly computerId: string }
   | { readonly type: "projects"; readonly computerId: string; readonly page: number }

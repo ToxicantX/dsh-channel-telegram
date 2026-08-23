@@ -1,8 +1,8 @@
 import { DshControlPlane, type ControlReply, type DshPort, type TurnProgress, type TurnProgressListener, type TurnResult } from "@wsxcant/dsh-channel-telegram-gateway";
 import { describe, expect, it } from "vitest";
-import type { QQOpenApiClient, QQReplyContext } from "./api.js";
+import type { QQInlineButton, QQOpenApiClient, QQReplyContext } from "./api.js";
 import { QQC2CChannel } from "./channel.js";
-import type { QQC2CMessage } from "./types.js";
+import { QQApiError, type QQC2CInteraction, type QQC2CMessage } from "./types.js";
 
 class Port implements DshPort {
   readonly watchers = new Set<TurnProgressListener>();
@@ -25,8 +25,22 @@ class Port implements DshPort {
   watchSession(_sessionId: string, listener: TurnProgressListener): () => void { this.watchers.add(listener); return () => { this.watchers.delete(listener); }; }
   emit(value: TurnProgress): void { for (const listener of this.watchers) listener(value); }
 }
-class Api { readonly sent: { user: string; content: string; context?: QQReplyContext }[] = []; readonly input: number[] = []; async sendC2CText(user: string, content: string, context?: QQReplyContext) { this.sent.push({ user, content, context }); } async sendC2CInputNotify(_user: string, _msg: string, seq: number) { this.input.push(seq); } }
+class Api {
+  readonly sent: { user: string; content: string; context?: QQReplyContext }[] = [];
+  readonly menus: { user: string; content: string; rows: readonly (readonly QQInlineButton[])[]; context?: QQReplyContext }[] = [];
+  readonly input: number[] = [];
+  readonly acknowledged: string[] = [];
+  failMenus = false;
+  async sendC2CText(user: string, content: string, context?: QQReplyContext) { this.sent.push({ user, content, context }); }
+  async sendC2CMenu(user: string, content: string, rows: readonly (readonly QQInlineButton[])[], context?: QQReplyContext) {
+    if (this.failMenus) throw new QQApiError("keyboard unsupported", 400, 40054009);
+    this.menus.push({ user, content, rows, context });
+  }
+  async acknowledgeInteraction(id: string) { this.acknowledged.push(id); }
+  async sendC2CInputNotify(_user: string, _msg: string, seq: number) { this.input.push(seq); }
+}
 const message = (id: string, content: string, userOpenId = "openid-A"): QQC2CMessage => ({ id, userOpenId, content, msgIndex: id, dedupeKey: id + ":" + id });
+const interaction = (id: string, data: string, userOpenId = "openid-A"): QQC2CInteraction => ({ id, userOpenId, data, buttonId: "button-1", dedupeKey: "interaction:" + id });
 async function flush(): Promise<void> { await new Promise<void>((resolve) => { setImmediate(resolve); }); }
 
 describe("QQC2CChannel", () => {
@@ -38,28 +52,42 @@ describe("QQC2CChannel", () => {
     const port = new Port(); const api = new Api();
     const channel = new QQC2CChannel({ control: new DshControlPlane(port, {}), api: api as unknown as QQOpenApiClient, allowedOpenIds: ["openid-A"], identityLookupEnabled: true });
     await channel.handleMessage(message("m1", "/openid", "openid-B"));
-    expect(api.sent).toEqual([{ user: "openid-B", content: "Your QQ user OpenID:\nopenid-B", context: { msgId: "m1", msgSeq: 1 } }]);
+    expect(api.sent).toEqual([{ user: "openid-B", content: "你的 QQ 用户 OpenID：\nopenid-B", context: { msgId: "m1", msgSeq: 1 } }]);
     expect(port.started).toBe(0);
     await channel.handleMessage(message("m2", "/menu", "openid-B"));
     expect(api.sent).toHaveLength(1);
     channel.dispose();
   });
 
-  it("renders numbered menus and resolves choices through opaque callbacks", async () => {
+  it("sends native Chinese menus and handles acknowledged button callbacks", async () => {
     const api = new Api(); const channel = new QQC2CChannel({ control: new DshControlPlane(new Port(), {}), api: api as unknown as QQOpenApiClient, allowedOpenIds: ["openid-A"] });
+    await channel.handleMessage(message("m1", "/computers"));
+    expect(api.sent).toEqual([]);
+    expect(api.menus[0]?.content).toContain("选择主机");
+    expect(api.menus[0]?.rows.flat().map((button) => button.text)).toEqual(expect.arrayContaining(["Local (online)", "返回", "刷新"]));
+    const callbackData = api.menus[0]!.rows[0]![0]!.callbackData;
+    await channel.handleInteraction(interaction("i1", callbackData));
+    expect(api.acknowledged).toEqual(["i1"]);
+    expect(api.menus[1]?.content).toContain("选择项目");
+    channel.dispose();
+  });
+
+  it("falls back to numbered Chinese menus and resolves choices through opaque callbacks", async () => {
+    const fallbacks: unknown[] = []; const api = new Api(); api.failMenus = true; const channel = new QQC2CChannel({ control: new DshControlPlane(new Port(), {}), api: api as unknown as QQOpenApiClient, allowedOpenIds: ["openid-A"], onMenuFallback: (error) => { fallbacks.push(error); } });
     await channel.handleMessage(message("m1", "/computers")); expect(api.sent[0]?.content).toContain("1. Local (online)");
-    await channel.handleMessage(message("m2", "1")); expect(api.sent[1]?.content).toContain("Select a project"); expect(api.sent[1]?.content).toContain("/back"); expect(api.sent[1]?.context).toEqual({ msgId: "m2", msgSeq: 1 });
-    await channel.handleMessage(message("m3", "b")); expect(api.sent[2]?.content).toContain("Select a computer");
-    await channel.handleMessage(message("m4", "1")); await channel.handleMessage(message("m5", "/refresh")); expect(api.sent.at(-1)?.content).toContain("Select a project"); channel.dispose();
+    expect(fallbacks).toEqual([expect.objectContaining({ status: 400, code: 40054009 })]);
+    await channel.handleMessage(message("m2", "1")); expect(api.sent[1]?.content).toContain("选择项目"); expect(api.sent[1]?.content).toContain("/back"); expect(api.sent[1]?.context).toEqual({ msgId: "m2", msgSeq: 1 });
+    await channel.handleMessage(message("m3", "返回")); expect(api.sent[2]?.content).toContain("选择主机");
+    await channel.handleMessage(message("m4", "1")); await channel.handleMessage(message("m5", "/刷新")); expect(api.sent.at(-1)?.content).toContain("选择项目"); channel.dispose();
   });
   it("does not treat an out-of-range number as DSH text and ignores duplicate events", async () => {
     const port = new Port(); const api = new Api(); const channel = new QQC2CChannel({ control: new DshControlPlane(port, {}), api: api as unknown as QQOpenApiClient, allowedOpenIds: ["openid-A"] });
     await channel.handleMessage(message("m1", "/computers"));
     await channel.handleMessage(message("m1", "/computers"));
-    expect(api.sent).toHaveLength(1);
+    expect(api.menus).toHaveLength(1);
     await channel.handleMessage(message("m2", "99"));
     expect(port.started).toBe(0);
-    expect(api.sent.at(-1)?.content).toContain("Unknown menu option");
+    expect(api.sent.at(-1)?.content).toContain("无效的菜单选项");
     channel.dispose();
   });
   it("serializes one user while allowing another user to proceed", async () => {

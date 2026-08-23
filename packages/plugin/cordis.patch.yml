@@ -11,4 +11,6 @@
         qqAllowedOpenIds: []
         qqProgressIntervalMs: 3000
         qqOpenIdLookupEnabled: false
+        wechatAllowedUserIds: []
+        wechatIdentityLookupEnabled: false
       disabled: false

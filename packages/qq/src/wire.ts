@@ -1,4 +1,4 @@
-import type { QQC2CMessage, QQGatewayPayload } from "./types.js";
+import type { QQC2CInteraction, QQC2CMessage, QQGatewayPayload } from "./types.js";
 
 export function decodeGatewayPayload(raw: unknown): QQGatewayPayload | undefined {
   let value = raw;
@@ -22,4 +22,23 @@ export function decodeC2CMessage(payload: QQGatewayPayload): QQC2CMessage | unde
   const msgIndexEntry = ext.find((item) => typeof item === "string" && item.startsWith("msg_idx="));
   const msgIndex = typeof msgIndexEntry === "string" ? msgIndexEntry.slice(8) : undefined;
   return { id: data.id, userOpenId, content: data.content.trim(), ...(msgIndex === undefined || msgIndex === "" ? {} : { msgIndex }), dedupeKey: data.id + ":" + (msgIndex ?? ""), ...(typeof data.timestamp === "string" ? { timestamp: data.timestamp } : {}) };
+}
+
+export function decodeC2CInteraction(payload: QQGatewayPayload): QQC2CInteraction | undefined {
+  if (payload.op !== 0 || payload.t !== "INTERACTION_CREATE" || typeof payload.d !== "object" || payload.d === null) return undefined;
+  const value = payload.d as Record<string, unknown>;
+  if (typeof value.id !== "string" || value.id === "" || typeof value.user_openid !== "string" || value.user_openid === "") return undefined;
+  if (value.chat_type !== 2 && value.scene !== "c2c") return undefined;
+  if (typeof value.data !== "object" || value.data === null) return undefined;
+  const resolved = (value.data as Record<string, unknown>).resolved;
+  if (typeof resolved !== "object" || resolved === null) return undefined;
+  const record = resolved as Record<string, unknown>;
+  if (typeof record.button_data !== "string" || record.button_data === "") return undefined;
+  return {
+    id: value.id,
+    userOpenId: value.user_openid,
+    data: record.button_data,
+    ...(typeof record.button_id === "string" && record.button_id !== "" ? { buttonId: record.button_id } : {}),
+    dedupeKey: "interaction:" + value.id
+  };
 }

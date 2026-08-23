@@ -1,10 +1,11 @@
 import { BoundedIdSet, KeyedSerialQueue, type ControlReply, type DshControlPlane, type TurnProgress } from "@wsxcant/dsh-channel-telegram-gateway";
 import type { QQOpenApiClient, QQReplyContext } from "./api.js";
 import { QQProgressReporter } from "./progress.js";
-import { QQApiError, type QQC2CMessage, type QQGatewayPayload } from "./types.js";
+import { QQApiError, type QQC2CInteraction, type QQC2CMessage, type QQGatewayPayload } from "./types.js";
 import type { QQGatewayConnection } from "./websocket.js";
 
 interface NumberedMenu { readonly actorId: string; readonly expiresAt: number; readonly buttons: readonly { readonly text: string; readonly callbackData: string }[]; }
+export interface QQMenuFallback { readonly name: string; readonly status?: number; readonly code?: number | string; }
 export interface QQC2CChannelOptions {
   readonly control: DshControlPlane;
   readonly api: QQOpenApiClient;
@@ -12,6 +13,7 @@ export interface QQC2CChannelOptions {
   readonly menuTtlMs?: number;
   readonly progressIntervalMs?: number;
   readonly identityLookupEnabled?: boolean;
+  readonly onMenuFallback?: (error: QQMenuFallback) => void;
   readonly now?: () => number;
 }
 
@@ -35,10 +37,17 @@ export class QQC2CChannel {
     this.unsubscribeProgress = options.control.onSessionProgress((event) => this.handleExternalProgress(event.actorId, event.conversationId, event.progress));
   }
 
-  async run(connection: QQGatewayConnection, signal: AbortSignal): Promise<void> { await connection.run(signal, (message, payload) => this.handleMessage(message, payload)); }
+  async run(connection: QQGatewayConnection, signal: AbortSignal): Promise<void> {
+    await connection.run(signal, (message, payload) => this.handleMessage(message, payload), (interaction) => this.handleInteraction(interaction));
+  }
 
   async handleMessage(message: QQC2CMessage, _payload?: QQGatewayPayload): Promise<void> {
     return this.queues.run(message.userOpenId, () => this.processMessage(message));
+  }
+
+  async handleInteraction(interaction: QQC2CInteraction): Promise<void> {
+    await this.options.api.acknowledgeInteraction(interaction.id);
+    return this.queues.run(interaction.userOpenId, () => this.processInteraction(interaction));
   }
 
   dispose(): void {
@@ -53,24 +62,24 @@ export class QQC2CChannel {
     if (!this.seen.addIfNew(message.dedupeKey)) return;
     if (!this.allowed.has(message.userOpenId)) {
       if (this.options.identityLookupEnabled === true && message.content.trim().toLowerCase() === "/openid") {
-        await this.sendParts(message.userOpenId, "Your QQ user OpenID:\n" + message.userOpenId, message.id);
+        await this.sendParts(message.userOpenId, "你的 QQ 用户 OpenID：\n" + message.userOpenId, message.id);
       }
       return;
     }
     const normalized = message.content.trim().toLowerCase();
     const menuInput = normalized.startsWith("/") ? normalized.slice(1) : normalized;
     const choice = /^\d+$/u.test(normalized) ? Number(normalized) : undefined;
-    const shortcut = menuInput === "back" || menuInput === "b" ? "back" : menuInput === "refresh" || menuInput === "r" ? "refresh" : undefined;
+    const shortcut = menuInput === "back" || menuInput === "b" || menuInput === "返回" ? "back" : menuInput === "refresh" || menuInput === "r" || menuInput === "刷新" ? "refresh" : undefined;
     const menu = this.menus.get(message.userOpenId);
     if ((choice !== undefined || shortcut !== undefined) && menu !== undefined) {
       if (menu.expiresAt <= this.now() || menu.actorId !== message.userOpenId) {
         this.menus.delete(message.userOpenId);
-        await this.sendParts(message.userOpenId, "This menu expired. Send /menu again.", message.id);
+        await this.sendParts(message.userOpenId, "菜单已过期，请重新发送 /menu。", message.id);
         return;
       }
-      const button = shortcut === undefined ? menu.buttons[(choice ?? 0) - 1] : menu.buttons.find((item) => item.text.trim().toLowerCase() === shortcut);
+      const button = shortcut === undefined ? menu.buttons[(choice ?? 0) - 1] : menu.buttons.find((item) => shortcutOfLabel(item.text) === shortcut);
       if (button === undefined) {
-        await this.sendParts(message.userOpenId, shortcut === undefined ? "Unknown menu option. Send a listed number, /back, or /refresh." : "That menu has no " + shortcut + " action. Send /menu.", message.id);
+        await this.sendParts(message.userOpenId, shortcut === undefined ? "无效的菜单选项，请回复列表中的数字、/back 或 /refresh。" : "当前菜单没有该操作，请重新发送 /menu。", message.id);
         return;
       }
       const result = await this.options.control.handleCallback({ updateId: message.dedupeKey + ":choice:" + (shortcut ?? String(choice)), actorId: message.userOpenId, conversationId: message.userOpenId, data: button.callbackData });
@@ -91,13 +100,33 @@ export class QQC2CChannel {
     for (const reply of replies) await this.sendReply(message, reply);
   }
 
+  private async processInteraction(interaction: QQC2CInteraction): Promise<void> {
+    if (this.disposed || !this.seen.addIfNew(interaction.dedupeKey) || !this.allowed.has(interaction.userOpenId)) return;
+    const result = await this.options.control.handleCallback({ updateId: interaction.dedupeKey, actorId: interaction.userOpenId, conversationId: interaction.userOpenId, data: interaction.data });
+    if (this.disposed) return;
+    if (result.view !== undefined) await this.sendMenu(interaction.userOpenId, result.view);
+    else await this.sendParts(interaction.userOpenId, result.answer);
+  }
+
   private async sendReply(message: QQC2CMessage, reply: ControlReply): Promise<void> {
     if (this.disposed) return;
     if (typeof reply === "string") { await this.sendParts(message.userOpenId, reply, message.id); return; }
+    await this.sendMenu(message.userOpenId, reply, message.id);
+  }
+
+  private async sendMenu(userOpenId: string, reply: Exclude<ControlReply, string>, msgId?: string): Promise<void> {
     const buttons = reply.rows.flat().map((button) => ({ text: button.text, callbackData: button.callbackData }));
-    this.menus.set(message.userOpenId, { actorId: message.userOpenId, buttons, expiresAt: this.now() + this.menuTtlMs });
+    this.menus.set(userOpenId, { actorId: userOpenId, buttons, expiresAt: this.now() + this.menuTtlMs });
+    const context: QQReplyContext = msgId === undefined ? {} : { msgId, msgSeq: 1 };
+    try {
+      await this.options.api.sendC2CMenu(userOpenId, reply.text + "\n\n请点击下方按钮选择。", reply.rows, context);
+      return;
+    } catch (error) {
+      if (this.disposed) return;
+      try { this.options.onMenuFallback?.(menuFallback(error)); } catch { /* Preserve the text fallback. */ }
+    }
     const lines = buttons.map((button, index) => String(index + 1) + ". " + button.text);
-    await this.sendParts(message.userOpenId, [reply.text, "", ...lines, "", "Reply with a number, /back, or /refresh."].join("\n"), message.id);
+    await this.sendParts(userOpenId, [reply.text, "", ...lines, "", "请回复数字、/back 或 /refresh。"].join("\n"), msgId);
   }
 
   private async sendParts(userOpenId: string, text: string, msgId?: string): Promise<void> {
@@ -144,3 +173,5 @@ export class QQC2CChannel {
 function progressTurn(progress: TurnProgress): number | undefined { switch (progress.type) { case "turn-start": case "assistant-delta": case "assistant-message": case "tool-start": case "tool-end": return progress.turn; case "turn-end": return progress.result.turn; default: return undefined; } }
 function splitText(text: string, max: number): readonly string[] { const chars = Array.from(text); const result: string[] = []; for (let i = 0; i < chars.length; i += max) result.push(chars.slice(i, i + max).join("")); return result.length ? result : ["OK"]; }
 function isExpiredReply(error: unknown): boolean { return error instanceof QQApiError && (String(error.code) === "40034005" || String(error.code) === "40034024"); }
+function shortcutOfLabel(value: string): "back" | "refresh" | undefined { const normalized = value.trim().toLowerCase(); return normalized === "back" || normalized === "返回" ? "back" : normalized === "refresh" || normalized === "刷新" ? "refresh" : undefined; }
+function menuFallback(error: unknown): QQMenuFallback { return error instanceof QQApiError ? { name: error.name, ...(error.status === undefined ? {} : { status: error.status }), ...(error.code === undefined ? {} : { code: error.code }) } : { name: error instanceof Error ? error.name : "UnknownError" }; }

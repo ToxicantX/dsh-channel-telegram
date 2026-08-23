@@ -3,6 +3,7 @@ import { QQ_API_BASE, QQApiError } from "./types.js";
 
 export interface QQOpenApiClientOptions { readonly tokenManager: QQAccessTokenManager; readonly fetch?: typeof fetch; readonly apiBase?: string; }
 export interface QQReplyContext { readonly msgId?: string; readonly eventId?: string; readonly msgSeq?: number; }
+export interface QQInlineButton { readonly text: string; readonly callbackData: string; }
 
 export class QQOpenApiClient {
   private readonly request: typeof fetch;
@@ -27,6 +28,37 @@ export class QQOpenApiClient {
         ...(context.msgSeq === undefined ? {} : { msg_seq: context.msgSeq })
       })
     });
+  }
+
+  async sendC2CMenu(userOpenId: string, content: string, rows: readonly (readonly QQInlineButton[])[], context: QQReplyContext = {}): Promise<unknown> {
+    if (userOpenId === "") throw new Error("QQ user OpenID is required");
+    if (content === "") throw new Error("QQ message content is required");
+    const buttons = rows.flat();
+    if (buttons.length === 0) return this.sendC2CText(userOpenId, content, context);
+    const keyboardRows = Array.from({ length: Math.ceil(buttons.length / 5) }, (_, rowIndex) => ({
+      buttons: buttons.slice(rowIndex * 5, rowIndex * 5 + 5).map((button, columnIndex) => ({
+        id: "dsh-" + String(rowIndex) + "-" + String(columnIndex),
+        render_data: { label: button.text, visited_label: button.text, style: 1 },
+        action: { type: 1, data: button.callbackData, permission: { type: 2 }, click_limit: 1 },
+        group_id: "dsh-menu"
+      }))
+    }));
+    return this.call("/v2/users/" + encodeURIComponent(userOpenId) + "/messages", {
+      method: "POST",
+      body: JSON.stringify({
+        msg_type: 2,
+        markdown: { content },
+        ...(context.msgId === undefined ? {} : { msg_id: context.msgId }),
+        ...(context.eventId === undefined ? {} : { event_id: context.eventId }),
+        ...(context.msgSeq === undefined ? {} : { msg_seq: context.msgSeq }),
+        keyboard: { content: { rows: keyboardRows } }
+      })
+    });
+  }
+
+  async acknowledgeInteraction(interactionId: string): Promise<unknown> {
+    if (interactionId === "") throw new Error("QQ interaction ID is required");
+    return this.call("/interactions/" + encodeURIComponent(interactionId), { method: "PUT", body: JSON.stringify({ code: 0 }) });
   }
 
   async sendC2CInputNotify(userOpenId: string, msgId: string, msgSeq: number, seconds = 60): Promise<unknown> {

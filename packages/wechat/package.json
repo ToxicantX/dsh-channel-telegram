@@ -1,0 +1,21 @@
+{
+  "name": "@wsxcant/dsh-channel-wechat",
+  "version": "0.1.0",
+  "description": "WeChat iLink Bot transport for DSH channel control",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": ["lib", "README.md", "LICENSE.tencent-openclaw-weixin"],
+  "engines": { "node": ">=22" },
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/ToxicantX/dsh-channel-telegram.git", "directory": "packages/wechat" },
+  "publishConfig": { "access": "public" },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@wsxcant/dsh-channel-telegram-gateway": "0.3.0"
+  }
+}

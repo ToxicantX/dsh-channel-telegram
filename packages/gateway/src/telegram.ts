@@ -144,14 +144,14 @@ export async function sendTelegramDiagnosticReady(bot: Bot, userIds: readonly nu
 
 export async function registerTelegramCommands(bot: Bot): Promise<void> {
   await bot.api.setMyCommands([
-    { command: "start", description: "Open computer, project, and session menu" },
-    { command: "menu", description: "Show the current target and selectors" },
-    { command: "computers", description: "Select a computer" },
-    { command: "projects", description: "Select a project" },
-    { command: "sessions", description: "Select a session" },
-    { command: "status", description: "Show the current target status" },
-    { command: "new", description: "Create a session in the selected project" },
-    { command: "stop", description: "Stop the current session turn" }
+    { command: "start", description: "打开主机、项目和会话菜单" },
+    { command: "menu", description: "显示当前目标和选择菜单" },
+    { command: "computers", description: "选择主机" },
+    { command: "projects", description: "选择项目" },
+    { command: "sessions", description: "选择会话" },
+    { command: "status", description: "显示当前目标状态" },
+    { command: "new", description: "在所选项目中新建会话" },
+    { command: "stop", description: "停止当前会话任务" }
   ], { scope: { type: "all_private_chats" } });
 }
 

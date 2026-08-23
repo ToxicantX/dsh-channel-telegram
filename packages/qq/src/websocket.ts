@@ -1,8 +1,8 @@
 import WebSocket from "ws";
 import type { QQOpenApiClient } from "./api.js";
 import type { QQAccessTokenManager } from "./token.js";
-import { QQ_C2C_INTENT, QQApiError, type QQC2CMessage, type QQGatewayPayload } from "./types.js";
-import { decodeC2CMessage, decodeGatewayPayload } from "./wire.js";
+import { QQ_GATEWAY_INTENTS, QQApiError, type QQC2CInteraction, type QQC2CMessage, type QQGatewayPayload } from "./types.js";
+import { decodeC2CInteraction, decodeC2CMessage, decodeGatewayPayload } from "./wire.js";
 
 export interface QQSocketMessageEvent { readonly data: unknown; }
 export interface QQSocketCloseEvent { readonly code: number; readonly reason?: string; }
@@ -48,12 +48,12 @@ export class QQGatewayConnection {
     if (this.delays.length === 0 || this.delays.some((value) => !Number.isSafeInteger(value) || value < 0)) throw new Error("reconnectDelaysMs must contain non-negative integers");
   }
 
-  async run(signal: AbortSignal, onMessage: (message: QQC2CMessage, payload: QQGatewayPayload) => void | Promise<void>): Promise<void> {
+  async run(signal: AbortSignal, onMessage: (message: QQC2CMessage, payload: QQGatewayPayload) => void | Promise<void>, onInteraction?: (interaction: QQC2CInteraction, payload: QQGatewayPayload) => void | Promise<void>): Promise<void> {
     let failures = 0;
     while (!signal.aborted) {
       let result: CloseResult;
       try {
-        result = await this.connect(signal, onMessage);
+        result = await this.connect(signal, onMessage, onInteraction);
       } catch (error) {
         if (signal.aborted) return;
         failures += 1;
@@ -73,7 +73,7 @@ export class QQGatewayConnection {
     return this.delays[index] ?? 0;
   }
 
-  private async connect(signal: AbortSignal, onMessage: (message: QQC2CMessage, payload: QQGatewayPayload) => void | Promise<void>): Promise<CloseResult> {
+  private async connect(signal: AbortSignal, onMessage: (message: QQC2CMessage, payload: QQGatewayPayload) => void | Promise<void>, onInteraction?: (interaction: QQC2CInteraction, payload: QQGatewayPayload) => void | Promise<void>): Promise<CloseResult> {
     const [url, accessToken] = await Promise.all([this.options.api.getGatewayUrl(), this.options.tokenManager.get()]);
     const socket = this.socketFactory(url);
     let timer: ReturnType<typeof setInterval> | undefined;
@@ -113,7 +113,7 @@ export class QQGatewayConnection {
           const interval = readHeartbeatInterval(payload.d);
           if (interval === undefined) { socket.close(4002, "Invalid Hello"); return; }
           if (this.resume === undefined) {
-            send({ op: 2, d: { token: "QQBot " + accessToken, intents: QQ_C2C_INTENT, shard: [0, 1], properties: { "$os": process.platform, "$browser": "dsh-channel-qq", "$device": "dsh-channel-qq" } } });
+            send({ op: 2, d: { token: "QQBot " + accessToken, intents: QQ_GATEWAY_INTENTS, shard: [0, 1], properties: { "$os": process.platform, "$browser": "dsh-channel-qq", "$device": "dsh-channel-qq" } } });
           } else {
             send({ op: 6, d: { token: "QQBot " + accessToken, session_id: this.resume.sessionId, seq: this.resume.seq ?? 0 } });
           }
@@ -130,7 +130,14 @@ export class QQGatewayConnection {
           if (settled) return;
           if (payload.t === "READY") { const sessionId = readSessionId(payload.d); if (sessionId !== undefined) { this.resume = { sessionId, ...(payload.s === undefined ? {} : { seq: payload.s }) }; ready = true; } }
           else if (payload.t === "RESUMED") ready = true;
-          else { const c2c = decodeC2CMessage(payload); if (c2c !== undefined) await onMessage(c2c, payload); }
+          else {
+            const c2c = decodeC2CMessage(payload);
+            if (c2c !== undefined) await onMessage(c2c, payload);
+            else if (onInteraction !== undefined) {
+              const interaction = decodeC2CInteraction(payload);
+              if (interaction !== undefined) await onInteraction(interaction, payload);
+            }
+          }
           if (payload.s !== undefined && this.resume !== undefined) this.resume.seq = payload.s;
         }).catch(() => { socket.close(4009, "Dispatch failed"); });
       };
