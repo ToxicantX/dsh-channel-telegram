@@ -2,6 +2,8 @@
 
 Cordis Host composition plugin for Telegram, QQ, and experimental WeChat iLink channels. Telegram/QQ remain compatible from DSH 0.1.0-rc.8; the WeChat Web QR control requires DSH client connection 0.1.1-rc.1 or newer.
 
+Full configuration guides and sanitized DSH Web screenshots: [English](https://github.com/ToxicantX/dsh-channel-telegram#readme) | [简体中文](https://github.com/ToxicantX/dsh-channel-telegram/blob/main/README.zh-CN.md)
+
 ## Install
 
 The 0.4.0 release contains Telegram, QQ, and the experimental WeChat transport. Publish npm packages in dependency order: `@wsxcant/dsh-channel-telegram-gateway@0.3.0`, `@wsxcant/dsh-channel-qq@0.2.0`, `@wsxcant/dsh-channel-wechat@0.1.0`, then `dsh-channel-telegram@0.4.0`, before installing this package from the registry:
