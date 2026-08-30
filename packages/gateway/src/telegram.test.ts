@@ -1,12 +1,13 @@
 import type { Update } from "grammy/types";
 import { describe, expect, it } from "vitest";
 import { TelegramGateway } from "./gateway.js";
-import type { DshPort, TurnProgress, TurnProgressListener, TurnResult } from "./ports.js";
+import type { DshInboundAttachment, DshPort, TurnProgress, TurnProgressListener, TurnResult } from "./ports.js";
 import { createTelegramBot, registerTelegramCommands, sendTelegramDiagnosticReady } from "./telegram.js";
 
 class FakePort implements DshPort {
   computerGate?: Promise<void>;
   private readonly watchers = new Map<string, Set<TurnProgressListener>>();
+  attachments?: readonly DshInboundAttachment[];
   async listComputers() {
     await this.computerGate;
     return [{ id: "local", title: "Local DSH", status: "online" }] as const;
@@ -24,7 +25,8 @@ class FakePort implements DshPort {
   emit(progress: TurnProgress): void {
     for (const listener of this.watchers.get(progress.sessionId) ?? []) listener(progress);
   }
-  async send(sessionId: string, _text: string, onProgress?: TurnProgressListener): Promise<TurnResult> {
+  async send(sessionId: string, _text: string, onProgress?: TurnProgressListener, attachments?: readonly DshInboundAttachment[]): Promise<TurnResult> {
+    this.attachments = attachments;
     onProgress?.({ type: "turn-start", sessionId, turn: 9 });
     onProgress?.({ type: "tool-start", sessionId, turn: 9, step: 1, callId: "c1", name: "read" });
     onProgress?.({ type: "tool-end", sessionId, turn: 9, step: 1, callId: "c1", name: "read", failed: false });
@@ -42,6 +44,9 @@ const from = { id: 42, is_bot: false, first_name: "User" };
 
 function messageUpdate(updateId: number, text: string): Update {
   return { update_id: updateId, message: { message_id: updateId, date: 1, chat, from, text } } as Update;
+}
+function photoUpdate(updateId: number, caption?: string, sender = from): Update {
+  return { update_id: updateId, message: { message_id: updateId, date: 1, chat: { ...chat, id: sender.id }, from: sender, ...(caption === undefined ? {} : { caption }), photo: [{ file_id: "photo-file", file_unique_id: "photo-unique", width: 1, height: 1, file_size: 8 }] } } as Update;
 }
 function callbackUpdate(updateId: number, data: string): Update {
   return { update_id: updateId, callback_query: { id: "cb" + String(updateId), chat_instance: "ci", from, data, message: { message_id: 100, date: 1, chat, text: "menu" } } } as Update;
@@ -63,6 +68,7 @@ describe("createTelegramBot", () => {
       calls.push({ method, payload: payload as Record<string, unknown> });
       if (method === "getMe") return { ok: true, result: { id: 999, is_bot: true, first_name: "Bot", username: "test_bot" } } as never;
       if (method === "answerCallbackQuery" || method === "setMyCommands") return { ok: true, result: true } as never;
+      if (method === "getFile") return { ok: true, result: { file_id: "photo-file", file_unique_id: "photo-unique", file_size: 8, file_path: "photos/test.png" } } as never;
       const text = String((payload as { text?: string }).text ?? "");
       return { ok: true, result: { message_id: ++messageId, date: 1, chat, text } } as never;
     });
@@ -124,5 +130,13 @@ describe("createTelegramBot", () => {
     expect(turnCalls.at(-1)?.method).toBe("editMessageText");
     expect(String(turnCalls.at(-1)?.payload.text)).toContain("dsh-channel-telegram");
     expect(String(turnCalls.at(-1)?.payload.text)).toContain("Session: s1");
+
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = (async () => new Response(Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), { status: 200 })) as typeof fetch;
+    try { await bot.handleUpdate(photoUpdate(7, "inspect this")); } finally { globalThis.fetch = previousFetch; }
+    expect(port.attachments).toEqual([{ type: "image", data: Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), mediaType: "image/jpeg" }]);
+    const beforeUnauthorized = calls.filter((call) => call.method === "getFile").length;
+    await bot.handleUpdate(photoUpdate(8, undefined, { id: 99, is_bot: false, first_name: "Other" }));
+    expect(calls.filter((call) => call.method === "getFile")).toHaveLength(beforeUnauthorized);
   });
 });

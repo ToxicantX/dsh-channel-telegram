@@ -17,7 +17,7 @@ class FakeApi {
 describe("QQProgressReporter", () => {
   it("uses input status, throttles safe stages, and finalizes with increasing msg_seq", async () => {
     let now = 10_000; const api = new FakeApi(); const reporter = new QQProgressReporter({ api: api as unknown as QQOpenApiClient, userOpenId: "openid", msgId: "m1", intervalMs: 3_000, now: () => now });
-    await reporter.update({ type: "queued", sessionId: "s" });
+    await reporter.update({ type: "queued", sessionId: "s", waiting: false });
     await reporter.update({ type: "turn-start", sessionId: "s", turn: 1 });
     await reporter.update({ type: "tool-start", sessionId: "s", turn: 1, step: 1, callId: "c", name: "read" });
     now += 3_001; await reporter.update({ type: "tool-end", sessionId: "s", turn: 1, step: 1, callId: "c", name: "read", failed: false });
@@ -27,6 +27,12 @@ describe("QQProgressReporter", () => {
       { kind: "text", content: "Running turn 1...", context: { msgId: "m1", msgSeq: 2 } },
       { kind: "text", content: "answer", context: { msgId: "m1", msgSeq: 3 } }
     ]);
+  });
+  it("sends one visible receipt when accepted behind active work", async () => {
+    const api = new FakeApi(); const reporter = new QQProgressReporter({ api: api as unknown as QQOpenApiClient, userOpenId: "openid", msgId: "m1" });
+    await reporter.update({ type: "queued", sessionId: "s", waiting: true });
+    await reporter.update({ type: "queued", sessionId: "s", waiting: true });
+    expect(api.values).toEqual([{ kind: "input:1" }, { kind: "text", content: "当前会话正在处理中，消息已加入队列。", context: { msgId: "m1", msgSeq: 2 } }]);
   });
   it("splits long Unicode final output without forwarding private progress types", async () => {
     const api = new FakeApi(); const reporter = new QQProgressReporter({ api: api as unknown as QQOpenApiClient, userOpenId: "openid", msgId: "m1", maxChars: 200, now: () => 10_000 });

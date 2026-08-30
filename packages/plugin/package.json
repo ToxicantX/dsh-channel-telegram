@@ -1,6 +1,6 @@
 {
   "name": "dsh-channel-telegram",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "publishConfig": { "access": "public" },
   "license": "MIT",
   "repository": { "type": "git", "url": "git+https://github.com/ToxicantX/dsh-channel-telegram.git", "directory": "packages/plugin" },
@@ -35,13 +35,14 @@
   "dependencies": {
     "@deepseek-ai/schemastery": "3.18.1",
     "qrcode": "^1.5.4",
-    "@wsxcant/dsh-channel-qq": "0.2.0",
-    "@wsxcant/dsh-channel-wechat": "0.1.0",
-    "@wsxcant/dsh-channel-telegram-gateway": "0.3.0"
+    "@wsxcant/dsh-channel-qq": "0.2.1",
+    "@wsxcant/dsh-channel-wechat": "0.1.1",
+    "@wsxcant/dsh-channel-telegram-gateway": "0.3.1"
   },
   "peerDependencies": {
     "@deepseek-ai/cordis": "^4.0.1",
     "@deepseek-ai/dsh-agent": ">=0.1.0-rc.8 <0.2.0",
+    "@deepseek-ai/dsh-attachment": ">=0.1.0-rc.8 <0.2.0",
     "@deepseek-ai/dsh-agent-default-model": ">=0.1.0-rc.8 <0.2.0",
     "@deepseek-ai/dsh-agent-presets": ">=0.1.0-rc.8 <0.2.0",
     "@deepseek-ai/dsh-credentials": ">=0.1.0-rc.8 <0.2.0",
@@ -55,6 +56,7 @@
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.1",
     "@deepseek-ai/dsh-agent": "0.1.0-rc.8",
+    "@deepseek-ai/dsh-attachment": "0.1.0-rc.8",
     "@deepseek-ai/dsh-agent-default-model": "0.1.0-rc.8",
     "@deepseek-ai/dsh-agent-presets": "0.1.0-rc.8",
     "@deepseek-ai/dsh-api-remotes": "0.1.0-rc.8",

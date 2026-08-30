@@ -171,6 +171,24 @@ describe("DshControlPlane", () => {
     expect(port.projectLookups).toBe(1);
   });
 
+  it("acknowledges a second message in the same conversation before the active turn finishes", async () => {
+    const port = new FakePort(); const control = new DshControlPlane(port, {});
+    await control.handle(text("1", "openid-A", "same", "/use computer local"));
+    await control.handle(text("2", "openid-A", "same", "/use project p1"));
+    await control.handle(text("3", "openid-A", "same", "/use session s1"));
+    let release!: () => void; port.sendGate = new Promise<void>((resolve) => { release = resolve; });
+    const firstProgress: TurnProgress[] = []; const secondProgress: TurnProgress[] = [];
+    const first = control.handle(text("4", "openid-A", "same", "first"), (event) => { firstProgress.push(event); });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    const second = control.handle(text("5", "openid-A", "same", "second"), (event) => { secondProgress.push(event); });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(firstProgress[0]).toEqual({ type: "queued", sessionId: "s1", waiting: false });
+    expect(secondProgress).toEqual([{ type: "queued", sessionId: "s1", waiting: true }]);
+    expect(port.sends).toEqual([{ sessionId: "s1", text: "first" }]);
+    release(); await Promise.all([first, second]);
+    expect(port.sends).toEqual([{ sessionId: "s1", text: "first" }, { sessionId: "s1", text: "second" }]);
+  });
+
   it("serializes direct turns targeting one session across conversations", async () => {
     const port = new FakePort();
     const control = new DshControlPlane(port, {});

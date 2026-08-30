@@ -10,6 +10,6 @@ Shared target menus are shown in Chinese. Native button callbacks subscribe to `
 
 QQ C2C input uses `msg_type: 6`. Unlike Telegram, QQ does not continuously edit one progress message. Current-stage progress is sent as separate text messages throttled by the host setting `qqProgressIntervalMs`, and the final result is sent as another message. QQ emits only the turn process node; tool names, tool results, and repeated `Working...` notices are omitted. This is an expected Telegram/QQ transport difference.
 
-## 0.4.0 Release
+## 0.4.1 Release
 
-Publish npm packages in dependency order: `@wsxcant/dsh-channel-telegram-gateway@0.3.0`, `@wsxcant/dsh-channel-qq@0.2.0`, `@wsxcant/dsh-channel-wechat@0.1.0`, then `dsh-channel-telegram@0.4.0`.
+Publish npm packages in dependency order: `@wsxcant/dsh-channel-telegram-gateway@0.3.1`, `@wsxcant/dsh-channel-qq@0.2.1`, `@wsxcant/dsh-channel-wechat@0.1.1`, then `dsh-channel-telegram@0.4.1`.

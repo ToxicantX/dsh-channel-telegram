@@ -30,8 +30,14 @@ export interface TurnResult {
   readonly turn: number;
 }
 
+/** Downloaded inbound media ready for the DSH attachment admission boundary. */
+export type DshInboundAttachment =
+  | { readonly type: "image"; readonly data: Uint8Array; readonly mediaType: string; readonly name?: string }
+  | { readonly type: "file"; readonly data: Uint8Array; readonly mediaType: string; readonly name?: string };
+
 export type TurnProgress =
-  | { readonly type: "queued"; readonly sessionId: string }
+  /** Accepted as a next-turn follow-up; waiting means earlier work already owns the session FIFO. */
+  | { readonly type: "queued"; readonly sessionId: string; readonly waiting: boolean }
   | { readonly type: "turn-start"; readonly sessionId: string; readonly turn: number }
   | { readonly type: "assistant-delta"; readonly sessionId: string; readonly turn: number; readonly step: number; readonly text: string }
   | { readonly type: "assistant-message"; readonly sessionId: string; readonly turn: number; readonly step: number; readonly text: string }
@@ -48,7 +54,8 @@ export interface DshPort {
   listSessions(computerId: string, projectId: string): Promise<readonly SessionSummary[]>;
   listAgentPresets(): Promise<readonly AgentPresetSummary[]>;
   createSession(computerId: string, projectId: string, agentPresetId: string): Promise<SessionSummary>;
-  send(sessionId: string, text: string, onProgress?: TurnProgressListener): Promise<TurnResult>;
+  /** Submit one ordinary follow-up as its own next turn; it never steers or interrupts active work. */
+  send(sessionId: string, text: string, onProgress?: TurnProgressListener, attachments?: readonly DshInboundAttachment[]): Promise<TurnResult>;
   status(sessionId: string): Promise<SessionSummary["status"]>;
   stop(sessionId: string): Promise<boolean>;
   watchSession(sessionId: string, listener: TurnProgressListener): () => void;
@@ -60,6 +67,7 @@ export interface TelegramTextUpdate {
   readonly chatType: string;
   readonly userId: number;
   readonly text: string;
+  readonly attachments?: readonly DshInboundAttachment[];
 }
 
 export interface TelegramCallbackUpdate {

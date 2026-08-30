@@ -1,6 +1,6 @@
 import type { MenuAction, MenuView } from "./menu.js";
 import { CallbackTokenStore, paginate } from "./menu.js";
-import type { DshPort, TurnProgress } from "./ports.js";
+import type { DshInboundAttachment, DshPort, TurnProgress } from "./ports.js";
 import { BoundedIdSet, KeyedSerialQueue } from "./queue.js";
 
 export interface ControlTextUpdate {
@@ -8,6 +8,7 @@ export interface ControlTextUpdate {
   readonly actorId: string;
   readonly conversationId: string;
   readonly text: string;
+  readonly attachments?: readonly DshInboundAttachment[];
 }
 
 export interface ControlCallbackUpdate {
@@ -60,6 +61,7 @@ export class DshControlPlane {
   private readonly conversationQueues = new KeyedSerialQueue();
   private readonly relayQueues = new KeyedSerialQueue();
   private readonly selections = new Map<string, Selection>();
+  private readonly pendingBySession = new Map<string, number>();
   private readonly watches = new Map<string, SessionWatchBinding>();
   private readonly sessionListeners = new Set<ControlSessionProgressListener>();
   private readonly disposeListeners = new Set<() => void>();
@@ -105,17 +107,23 @@ export class DshControlPlane {
     const updateId = String(update.updateId);
     if (!this.seen.addIfNew(this.idempotencyKey("text", actorId, conversationId, updateId))) return [];
     const text = update.text.trim();
-    if (text === "") return [];
+    const attachments = update.attachments;
+    if (text === "" && (attachments === undefined || attachments.length === 0)) return [];
     const key = this.selectionKey(actorId, conversationId);
     // Stop must interrupt an active send instead of waiting behind it.
     if (commandOf(text) === "/stop") return [await this.stop(actorId, conversationId)];
-    return this.conversationQueues.run(key, () => this.handleText(actorId, conversationId, text, onProgress));
+    if (!text.startsWith("/")) {
+      const scheduled = await this.conversationQueues.run(key, async () => ({ work: this.sendText(actorId, conversationId, text, onProgress, attachments) }));
+      const reply = await scheduled.work;
+      return reply === undefined ? [] : [reply];
+    }
+    return this.conversationQueues.run(key, () => this.handleText(actorId, conversationId, text, onProgress, attachments));
   }
 
-  private async handleText(actorId: string, conversationId: string, text: string, onProgress?: ControlProgressListener): Promise<readonly ControlReply[]> {
+  private async handleText(actorId: string, conversationId: string, text: string, onProgress?: ControlProgressListener, attachments?: readonly DshInboundAttachment[]): Promise<readonly ControlReply[]> {
     if (this.disposed) return [];
     if (!text.startsWith("/")) {
-      const reply = await this.sendText(actorId, conversationId, text, onProgress);
+      const reply = await this.sendText(actorId, conversationId, text, onProgress, attachments);
       return reply === undefined ? [] : [reply];
     }
 
@@ -401,21 +409,24 @@ export class DshControlPlane {
     return (await this.dsh.stop(sessionId)) ? "已请求停止；排队中的工作已保留。" : "没有正在运行的任务可停止。";
   }
 
-  private async sendText(actorId: string, conversationId: string, text: string, onProgress?: ControlProgressListener): Promise<string | undefined> {
+  private async sendText(actorId: string, conversationId: string, text: string, onProgress?: ControlProgressListener, attachments?: readonly DshInboundAttachment[]): Promise<string | undefined> {
     const sessionId = this.selection(actorId, conversationId).sessionId;
     if (sessionId === undefined) return "请从 /menu 选择会话。";
     const key = this.selectionKey(actorId, conversationId);
+    const pending = this.pendingBySession.get(sessionId) ?? 0;
+    this.pendingBySession.set(sessionId, pending + 1);
     let progressTail = Promise.resolve();
     const emit = onProgress === undefined ? undefined : (progress: TurnProgress) => {
       progressTail = progressTail.then(() => onProgress(progress)).then(() => undefined);
     };
-    if (emit !== undefined) emit({ type: "queued", sessionId });
+    const waiting = pending > 0;
+    if (emit !== undefined) emit({ type: "queued", sessionId, waiting });
     try {
       const result = await this.queues.run(sessionId, () => this.relayQueues.run(key, async () => {
         const binding = this.watches.get(key);
         if (binding !== undefined && binding.sessionId === sessionId) binding.suppressDirect = true;
         try {
-          return await this.dsh.send(sessionId, text, emit);
+          return await this.dsh.send(sessionId, text, emit, attachments);
         } finally {
           if (binding !== undefined) binding.suppressDirect = false;
         }
@@ -430,6 +441,10 @@ export class DshControlPlane {
         return undefined;
       }
       return "DSH 请求失败。";
+    } finally {
+      const remaining = (this.pendingBySession.get(sessionId) ?? 1) - 1;
+      if (remaining <= 0) this.pendingBySession.delete(sessionId);
+      else this.pendingBySession.set(sessionId, remaining);
     }
   }
 }

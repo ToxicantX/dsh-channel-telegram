@@ -1,6 +1,6 @@
 {
   "name": "@wsxcant/dsh-channel-wechat",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "WeChat iLink Bot transport for DSH channel control",
   "type": "module",
   "main": "lib/index.js",
@@ -16,6 +16,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@wsxcant/dsh-channel-telegram-gateway": "0.3.0"
+    "@wsxcant/dsh-channel-telegram-gateway": "0.3.1"
   }
 }

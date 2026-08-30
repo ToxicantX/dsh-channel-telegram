@@ -9,6 +9,7 @@ import {
   MessageState,
   MessageType,
   type Credentials,
+  type DownloadedMedia,
   type IncomingMessage,
   type QrLoginCallbacks,
   type SendContent,
@@ -105,6 +106,18 @@ export class WeChatBot extends EventEmitter {
 
   async sendTyping(userId: string): Promise<void> { await this.setTyping(userId, 1); }
   async stopTyping(userId: string): Promise<void> { await this.setTyping(userId, 2); }
+
+  async download(message: IncomingMessage): Promise<DownloadedMedia | null> {
+    const image = message.images[0] as WireMessageItem | undefined;
+    if (image?.image_item?.media) {
+      return { data: await this.api.downloadMedia(image.image_item.media, image.image_item.aeskey), type: "image" };
+    }
+    const file = message.files[0] as WireMessageItem | undefined;
+    if (file?.file_item?.media) {
+      return { data: await this.api.downloadMedia(file.file_item.media), type: "file", fileName: file.file_item.file_name };
+    }
+    return null;
+  }
 
   start(): Promise<void> {
     if (this.runPromise !== undefined) return this.runPromise;

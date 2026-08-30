@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { createDecipheriv, randomBytes } from "node:crypto";
 import type {
   GetConfigResponse,
   GetUpdatesResponse,
@@ -90,6 +90,22 @@ export class ILinkApi {
     return this.post(baseUrl, "ilink/bot/msg/notifystop", { base_info: this.baseInfo() }, token, DEFAULT_CONFIG_TIMEOUT_MS, "notifyStop");
   }
 
+  async downloadMedia(media: { readonly encrypt_query_param?: string; readonly aes_key?: string; readonly full_url?: string }, aeskeyOverride?: string, maxBytes = 16 * 1024 * 1024): Promise<Buffer> {
+    const downloadUrl = media.full_url?.trim() || (media.encrypt_query_param ? `https://novac2c.cdn.weixin.qq.com/c2c/download?encrypted_query_param=${encodeURIComponent(media.encrypt_query_param)}` : undefined);
+    if (!downloadUrl) throw new Error("WeChat media reference is missing a download URL");
+    const response = await this.fetchImpl(downloadUrl, { signal: AbortSignal.timeout(60_000), headers: this.commonHeaders() });
+    if (!response.ok) throw new Error(`WeChat media download failed with HTTP ${response.status}`);
+    const declared = Number(response.headers.get("content-length") ?? 0);
+    if (Number.isFinite(declared) && declared > maxBytes) throw new Error("WeChat media exceeds the transport size limit");
+    const ciphertext = Buffer.from(await response.arrayBuffer());
+    if (ciphertext.length > maxBytes) throw new Error("WeChat media exceeds the transport size limit");
+    const keySource = aeskeyOverride ?? media.aes_key;
+    if (!keySource) throw new Error("WeChat media is missing its decryption key");
+    const key = decodeAesKey(keySource);
+    const decipher = createDecipheriv("aes-128-ecb", key, null);
+    return Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+  }
+
   private baseInfo(): { channel_version: string; bot_agent: string } {
     return { channel_version: TENCENT_TRANSPORT_VERSION, bot_agent: this.botAgent };
   }
@@ -178,6 +194,14 @@ export function isAbortError(error: unknown): boolean {
 
 function trailingSlash(value: string): string { return value.endsWith("/") ? value : value + "/"; }
 function randomWechatUin(): string { return Buffer.from(String(randomBytes(4).readUInt32BE(0)), "utf8").toString("base64"); }
+
+function decodeAesKey(encoded: string): Buffer {
+  if (/^[0-9a-fA-F]{32}$/u.test(encoded)) return Buffer.from(encoded, "hex");
+  const decoded = Buffer.from(encoded, "base64");
+  if (decoded.length === 16) return decoded;
+  if (decoded.length === 32 && /^[0-9a-fA-F]{32}$/u.test(decoded.toString("ascii"))) return Buffer.from(decoded.toString("ascii"), "hex");
+  throw new Error("WeChat media decryption key is invalid");
+}
 
 async function parseResponse<T>(response: Response, label: string): Promise<T> {
   if (!response.ok) throw new Error(`${label} failed with HTTP ${response.status}`);

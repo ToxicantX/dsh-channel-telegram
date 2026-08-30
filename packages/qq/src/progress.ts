@@ -21,6 +21,7 @@ export class QQProgressReporter {
   private tail = Promise.resolve();
   private final = false;
   private inputSent = false;
+  private queuedSent = false;
 
   constructor(private readonly options: QQProgressReporterOptions) {
     this.intervalMs = Math.max(1_000, options.intervalMs ?? 3_000);
@@ -41,6 +42,7 @@ export class QQProgressReporter {
       await this.options.api.sendC2CInputNotify(this.options.userOpenId, this.options.msgId, this.seq).catch(() => undefined);
     }
     if (this.options.shouldStop?.()) { this.final = true; return; }
+    if (progress.type === "queued" && progress.waiting) { if (!this.queuedSent) { this.queuedSent = true; await this.sendText("当前会话正在处理中，消息已加入队列。"); } return; }
     if (progress.type === "turn-end") { this.final = true; await this.sendFinal(progress.result.text || ("Turn ended: " + progress.result.reason + ".")); return; }
     if (progress.type === "failed") { this.final = true; await this.sendFinal(progress.message); return; }
     const stage = renderStage(progress);

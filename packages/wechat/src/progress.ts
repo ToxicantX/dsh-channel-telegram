@@ -11,6 +11,7 @@ export interface WechatProgressReporterOptions {
 export class WechatProgressReporter {
   private tail = Promise.resolve();
   private started = false;
+  private queuedSent = false;
   private final = false;
 
   constructor(private readonly options: WechatProgressReporterOptions) {}
@@ -27,6 +28,7 @@ export class WechatProgressReporter {
       await this.options.bot.sendTyping(this.options.userId).catch(() => undefined);
     }
     if (this.options.shouldStop?.()) { this.final = true; return; }
+    if (progress.type === "queued" && progress.waiting) { if (!this.queuedSent) { this.queuedSent = true; await this.send("当前会话正在处理中，消息已加入队列。"); } return; }
     if (progress.type === "turn-start") {
       await this.send("Running turn " + String(progress.turn) + "...");
       return;

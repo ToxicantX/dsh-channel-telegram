@@ -40,7 +40,7 @@ describe("ProgressMessageEditor", () => {
       setTimer: (callback) => { scheduled = callback; return 1 as unknown as ReturnType<typeof setTimeout>; },
       clearTimer: () => { scheduled = undefined; }
     });
-    await editor.update({ type: "queued", sessionId: "session-one" });
+    await editor.update({ type: "queued", sessionId: "session-one", waiting: false });
     await editor.update({ type: "turn-start", sessionId: "session-one", turn: 7 });
     await editor.update({ type: "assistant-delta", sessionId: "session-one", turn: 7, step: 1, text: "partial" });
     expect(sent).toHaveLength(1);
@@ -60,7 +60,7 @@ describe("ProgressMessageEditor", () => {
       send: async (text) => { sent.push(text); return { messageId: sent.length }; },
       edit: async () => { throw new ProgressMessageUnavailableError("deleted"); }
     });
-    await editor.update({ type: "queued", sessionId: "session-one" });
+    await editor.update({ type: "queued", sessionId: "session-one", waiting: false });
     await editor.update({ type: "turn-end", sessionId: "session-one", result: result("replacement final") });
     expect(sent).toHaveLength(2);
     expect(sent[1]).toContain("replacement final");
@@ -71,7 +71,7 @@ describe("ProgressMessageEditor", () => {
       send: async () => ({ messageId: 1 }),
       edit: async () => { throw new Error("Too Many Requests: retry after 3"); }
     });
-    await editor.update({ type: "queued", sessionId: "session-one" });
+    await editor.update({ type: "queued", sessionId: "session-one", waiting: false });
     await expect(editor.update({ type: "turn-end", sessionId: "session-one", result: result("final") }))
       .rejects.toThrow("Too Many Requests");
   });
@@ -89,7 +89,7 @@ describe("ProgressMessageEditor", () => {
       setTimer: (callback) => { scheduled = callback; return 1 as unknown as ReturnType<typeof setTimeout>; },
       clearTimer: () => { scheduled = undefined; }
     });
-    await editor.update({ type: "queued", sessionId: "session-one" });
+    await editor.update({ type: "queued", sessionId: "session-one", waiting: false });
     await editor.update({ type: "turn-start", sessionId: "session-one", turn: 7 });
     expect(scheduled).toBeTypeOf("function");
     editor.dispose();
@@ -106,7 +106,7 @@ describe("ProgressMessageEditor", () => {
       send: async (text) => { sent.push(text); return { messageId: sent.length }; },
       edit: async (_id, text) => { edits.push(text); }
     });
-    await editor.update({ type: "queued", sessionId: "session-one" });
+    await editor.update({ type: "queued", sessionId: "session-one", waiting: false });
     await editor.update({ type: "turn-end", sessionId: "session-one", result: result("x".repeat(9000)) });
     expect(edits).toHaveLength(1);
     expect(sent.length).toBeGreaterThan(2);

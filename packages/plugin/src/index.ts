@@ -12,7 +12,7 @@ import { installWechatRpc } from "./wechat-rpc.js";
 
 export const name = "dsh-channel-telegram";
 export const inject = [
-  "agentDefaultModel", "agentPresets", "agents", "connection", "credentials",
+  "agentDefaultModel", "agentPresets", "agents", "attachments", "connection", "credentials",
   "sessionQuery", "sessions", "workspaceRegistry"
 ];
 

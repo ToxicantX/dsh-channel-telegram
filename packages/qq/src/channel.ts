@@ -42,6 +42,7 @@ export class QQC2CChannel {
   }
 
   async handleMessage(message: QQC2CMessage, _payload?: QQGatewayPayload): Promise<void> {
+    if (this.allowed.has(message.userOpenId) && isDirectTurnText(message.content)) return this.processMessage(message);
     return this.queues.run(message.userOpenId, () => this.processMessage(message));
   }
 
@@ -173,5 +174,11 @@ export class QQC2CChannel {
 function progressTurn(progress: TurnProgress): number | undefined { switch (progress.type) { case "turn-start": case "assistant-delta": case "assistant-message": case "tool-start": case "tool-end": return progress.turn; case "turn-end": return progress.result.turn; default: return undefined; } }
 function splitText(text: string, max: number): readonly string[] { const chars = Array.from(text); const result: string[] = []; for (let i = 0; i < chars.length; i += max) result.push(chars.slice(i, i + max).join("")); return result.length ? result : ["OK"]; }
 function isExpiredReply(error: unknown): boolean { return error instanceof QQApiError && (String(error.code) === "40034005" || String(error.code) === "40034024"); }
+function isDirectTurnText(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "" || normalized.startsWith("/") || /^\d+$/u.test(normalized)) return false;
+  return normalized !== "back" && normalized !== "b" && normalized !== "返回" && normalized !== "refresh" && normalized !== "r" && normalized !== "刷新";
+}
+
 function shortcutOfLabel(value: string): "back" | "refresh" | undefined { const normalized = value.trim().toLowerCase(); return normalized === "back" || normalized === "返回" ? "back" : normalized === "refresh" || normalized === "刷新" ? "refresh" : undefined; }
 function menuFallback(error: unknown): QQMenuFallback { return error instanceof QQApiError ? { name: error.name, ...(error.status === undefined ? {} : { status: error.status }), ...(error.code === undefined ? {} : { code: error.code }) } : { name: error instanceof Error ? error.name : "UnknownError" }; }

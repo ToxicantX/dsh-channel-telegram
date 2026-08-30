@@ -6,9 +6,9 @@ Full configuration guides and sanitized DSH Web screenshots: [English](https://g
 
 ## Install
 
-The 0.4.0 release contains Telegram, QQ, and the experimental WeChat transport. Publish npm packages in dependency order: `@wsxcant/dsh-channel-telegram-gateway@0.3.0`, `@wsxcant/dsh-channel-qq@0.2.0`, `@wsxcant/dsh-channel-wechat@0.1.0`, then `dsh-channel-telegram@0.4.0`, before installing this package from the registry:
+The 0.4.1 release contains Telegram, QQ, and the experimental WeChat transport. Publish npm packages in dependency order: `@wsxcant/dsh-channel-telegram-gateway@0.3.1`, `@wsxcant/dsh-channel-qq@0.2.1`, `@wsxcant/dsh-channel-wechat@0.1.1`, then `dsh-channel-telegram@0.4.1`, before installing this package from the registry:
 
-    dsh plugin --profile web add dsh-channel-telegram@0.4.0
+    dsh plugin --profile web add dsh-channel-telegram@0.4.1
 
 For source-checkout verification, link the profile dependency to this package and rebuild the workspace. The DSH plugin manager installs a published package and adds its bundled composition patch to the profile. Restart the active DSH Web Host, then configure Telegram, QQ, and experimental WeChat under Settings > Plugins.
 
@@ -77,7 +77,7 @@ Telegram/QQ transport difference.
 
 The WeChat card supports QR login, scanned/verification/online/expired/error states, logout, allowlisted iLink user IDs, and a default-off `/userid` bootstrap command. Its DSH-native transport adapts Tencent `@tencent-weixin/openclaw-weixin@2.4.6` QR login, iLink API, monitor, session guard, config cache, lifecycle notifications, and cursor handling; it does not embed the OpenClaw plugin runtime. Credentials, cursor, context tokens, and typing state are serialized under the fixed write-only DSH credential ref `DSH_CHANNEL_TELEGRAM_WECHAT_ILINK`. The browser receives only a Host-generated QR image and public account/status metadata; raw QR URLs, verification codes, and tokens are not written to ordinary settings.
 
-The private-chat channel reuses the shared DSH control plane and archived-session filtering. It sends typing status, one turn-start process node, and the final answer. Group chat, button menus, and media forwarding are outside V1. Real desktop testing verified QR confirmation, Online, persistent restart recovery, private inbound messages, and replies. [Tencent/openclaw-weixin issue #244](https://github.com/Tencent/openclaw-weixin/issues/244) remains relevant for accounts that stay online while returning empty `msgs`.
+The private-chat channel reuses the shared DSH control plane and archived-session filtering. It sends typing status, one turn-start process node, and the final answer. Group chat and button menus are outside V1. Telegram and WeChat accept one inbound image or TXT/CSV/JSON/Markdown text file per message; DSH persists images and injects text-file contents, while PDFs, archives, office files, and other binary files are rejected because the current DSH content model has no generic file block. QQ media events remain outside the current scope. Real desktop testing verified QR confirmation, Online, persistent restart recovery, and long-poll startup. [Tencent/openclaw-weixin issue #244](https://github.com/Tencent/openclaw-weixin/issues/244) remains relevant for accounts that stay online while returning empty `msgs`.
 
 Never place either bot secret in composition configuration, repository files, logs, or
 normal settings. Telegram uses `TELEGRAM_BOT_TOKEN`; QQ uses

@@ -17,7 +17,7 @@ export class ProgressRenderer {
   accept(progress: TurnProgress): void {
     this.sessionId = progress.sessionId;
     switch (progress.type) {
-      case "queued": this.status = "Queued"; break;
+      case "queued": this.status = progress.waiting ? "Queued behind active turn" : "Queued"; break;
       case "turn-start": this.turn = progress.turn; this.status = "Running"; break;
       case "assistant-delta":
         if (this.step !== progress.step) { this.step = progress.step; this.answer = ""; }

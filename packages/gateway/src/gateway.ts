@@ -47,17 +47,18 @@ export class TelegramGateway {
   }
 
   async handle(update: TelegramTextUpdate, onProgress?: GatewayProgressListener): Promise<readonly GatewayReply[]> {
-    if (!this.authorized(update)) return [];
+    if (!this.accepts(update)) return [];
     return this.control.handle({
       updateId: String(update.updateId),
       actorId: String(update.userId),
       conversationId: String(update.chatId),
-      text: update.text
+      text: update.text,
+      attachments: update.attachments
     }, onProgress);
   }
 
   async handleCallback(update: TelegramCallbackUpdate): Promise<GatewayCallbackResult> {
-    if (!this.authorized(update)) return { answer: "Not authorized." };
+    if (!this.accepts(update)) return { answer: "Not authorized." };
     return this.control.handleCallback({
       updateId: String(update.updateId),
       actorId: String(update.userId),
@@ -83,7 +84,7 @@ export class TelegramGateway {
     this.control.dispose();
   }
 
-  private authorized(update: { readonly chatType: string; readonly userId: number }): boolean {
+  accepts(update: { readonly chatType: string; readonly userId: number }): boolean {
     return update.chatType === "private" && this.allowed.has(update.userId);
   }
 }

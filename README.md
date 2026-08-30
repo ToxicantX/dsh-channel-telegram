@@ -4,11 +4,11 @@
 
 `dsh-channel-telegram` connects a DeepSeek Harness Host to Telegram private chats, QQ Official Bot C2C messages, and WeChat iLink private chats. All three channels share the same authenticated DSH control plane for host, project, and session selection.
 
-Version `0.4.0` includes:
+Version `0.4.1` includes:
 
-- Telegram inline menus and progress-message editing.
+- Telegram inline menus, progress-message editing, and inbound images/text files.
 - QQ native C2C keyboards, interaction callbacks, and a numbered-text fallback.
-- A DSH-native WeChat transport adapted from Tencent's MIT-licensed `@tencent-weixin/openclaw-weixin@2.4.6` transport.
+- A DSH-native WeChat transport adapted from Tencent's MIT-licensed `@tencent-weixin/openclaw-weixin@2.4.6` transport, with inbound images and text files.
 - Chinese progressive menus: downstream choices appear only after their parent target has been selected.
 - A dedicated **Status** action that shows the selected host, project, session, and session state.
 
@@ -26,7 +26,7 @@ Version `0.4.0` includes:
 Install the published Host plugin into the `web` profile:
 
 ```bash
-dsh plugin --profile web add dsh-channel-telegram@0.4.0
+dsh plugin --profile web add dsh-channel-telegram@0.4.1
 ```
 
 Restart the active DSH Web Host or the desktop application after installation. Open **Settings → Plugins** to configure each channel. To upgrade, install the desired pinned version with the same command, restart DSH, and confirm the installed version in the plugin list. Credentials remain in DSH credential storage instead of the repository or composition file.
@@ -35,10 +35,10 @@ Published packages:
 
 | Package | Version | Purpose |
 | --- | --- | --- |
-| `dsh-channel-telegram` | `0.4.0` | DSH Host plugin and Web settings cards |
-| `@wsxcant/dsh-channel-telegram-gateway` | `0.3.0` | Shared menus, routing, and session relay |
-| `@wsxcant/dsh-channel-qq` | `0.2.0` | QQ Official Bot C2C transport |
-| `@wsxcant/dsh-channel-wechat` | `0.1.0` | WeChat iLink private-chat transport |
+| `dsh-channel-telegram` | `0.4.1` | DSH Host plugin and Web settings cards |
+| `@wsxcant/dsh-channel-telegram-gateway` | `0.3.1` | Shared menus, routing, and session relay |
+| `@wsxcant/dsh-channel-qq` | `0.2.1` | QQ Official Bot C2C transport |
+| `@wsxcant/dsh-channel-wechat` | `0.1.1` | WeChat iLink private-chat transport |
 
 ## Configure in DSH Web
 
@@ -83,7 +83,7 @@ QQ prefers native C2C buttons. If the QQ API rejects a keyboard, the channel aut
 
 QR credentials, cursor, context tokens, and typing state are serialized under the fixed write-only DSH credential reference `DSH_CHANNEL_TELEGRAM_WECHAT_ILINK`. Raw QR URLs, verification codes, and tokens are not stored in ordinary settings or rendered as plain values.
 
-WeChat currently uses numbered text menus because iLink private chats do not expose the QQ-style native keyboard used by this plugin. Group chats and media forwarding are outside the current V1 scope.
+WeChat currently uses numbered text menus because iLink private chats do not expose the QQ-style native keyboard used by this plugin. Telegram and WeChat accept one inbound image or TXT/CSV/JSON/Markdown text file per message. QQ media events and other binary attachments are outside the current scope.
 
 ## Composition defaults
 
@@ -153,6 +153,9 @@ Text commands remain available:
 | Capability | Telegram | QQ | WeChat |
 | --- | --- | --- | --- |
 | Private/C2C text | Yes | Yes | Yes |
+| Inbound images | Yes | No | Yes |
+| Inbound text files (TXT/CSV/JSON/MD) | Yes | No | Yes |
+| Other binary attachments | No | No | No |
 | Native buttons | Inline keyboard | C2C keyboard | No; numbered text |
 | Numbered fallback | Yes | Yes | Yes |
 | Allowlist | Numeric user ID | Event OpenID | iLink user ID |
@@ -160,7 +163,7 @@ Text commands remain available:
 | Progress | Edited message | Throttled stage messages | Typing + one process node |
 | Selected-session relay | Yes | Yes | Yes |
 
-Only allowlisted users reach the DSH control plane. Callback tokens are opaque, actor-bound, conversation-bound, single-use, and expire automatically.
+Only allowlisted users reach the DSH control plane. Callback tokens are opaque, actor-bound, conversation-bound, single-use, and expire automatically. Messages sent while the selected session is busy are accepted as FIFO next-turn follow-ups: the active turn is not interrupted, and Telegram, QQ, or WeChat immediately shows a queued receipt before the later turn starts. `/stop` remains immediate and preserves queued inbox work.
 
 ## Troubleshooting
 

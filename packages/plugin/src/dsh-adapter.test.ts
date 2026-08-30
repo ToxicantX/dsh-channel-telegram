@@ -192,6 +192,25 @@ describe("DshAdapter session listing", () => {
   });
 });
 
+describe("DshAdapter inbound attachments", () => {
+  it("persists images and appends text file content to the user message", async () => {
+    let followed: any; let listener: ((session: { id: string }, event: SessionEvent) => void) | undefined;
+    const agent = { status: "idle", followup: (message: any) => { followed = message; listener?.({ id: "s1" }, envelope("turn/start", { turn: 1 })); listener?.({ id: "s1" }, envelope("user/message", { id: message.id })); listener?.({ id: "s1" }, envelope("turn/end", { turn: 1, reason: { kind: "completed" } })); } };
+    const saved: any[] = [];
+    const ctx = {
+      attachments: { saveImage: async (input: any) => { saved.push(input); return { attachmentId: "att-1", mediaType: input.mediaType, bytes: input.data.byteLength, width: 1, height: 1 }; } },
+      agents: { get: () => agent }, on: (_name: string, value: any) => { listener = value; return () => { listener = undefined; }; }
+    } as unknown as Context;
+    const adapter = new DshAdapter(ctx, { turnTimeoutMs: 1000, hostName: "Build Host" });
+    await adapter.send("s1", "caption", undefined, [
+      { type: "image", data: new Uint8Array([1, 2]), mediaType: "image/png", name: "x.png" },
+      { type: "file", data: new TextEncoder().encode("hello"), mediaType: "text/plain", name: "note.txt" }
+    ]);
+    expect(saved).toHaveLength(1);
+    expect(followed.content).toEqual([{ type: "text", text: "caption" }, { type: "image", attachment: saved[0] && expect.anything() }, { type: "text", text: "\n\n[Attached file: note.txt]\nhello" }]);
+  });
+});
+
 describe("DshAdapter presets and watchSession", () => {
   it("filters broken presets and passes the selected preset through metadata and setup", async () => {
     let listCalls = 0;

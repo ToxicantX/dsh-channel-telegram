@@ -30,13 +30,13 @@ importers:
         specifier: 3.18.1
         version: 3.18.1
       '@wsxcant/dsh-channel-qq':
-        specifier: 0.2.0
+        specifier: 0.2.1
         version: link:../qq
       '@wsxcant/dsh-channel-telegram-gateway':
-        specifier: 0.3.0
+        specifier: 0.3.1
         version: link:../gateway
       '@wsxcant/dsh-channel-wechat':
-        specifier: 0.1.0
+        specifier: 0.1.1
         version: link:../wechat
       qrcode:
         specifier: ^1.5.4
@@ -57,6 +57,9 @@ importers:
       '@deepseek-ai/dsh-api-remotes':
         specifier: 0.1.0-rc.8
         version: 0.1.0-rc.8(d702985e26a075607f4d67503ffa9ae7)
+      '@deepseek-ai/dsh-attachment':
+        specifier: 0.1.0-rc.8
+        version: 0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-brand@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)(@deepseek-ai/dsh-invariants@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1)))(@deepseek-ai/dsh-invariants@0.1.0-rc.8(@deepseek-ai/cordis@4.0.1))
       '@deepseek-ai/dsh-client-connection':
         specifier: 0.1.0-rc.8
         version: 0.1.0-rc.8(4b7a7a6d2676faff3bcc8ad1cc2da3e6)
@@ -105,7 +108,7 @@ importers:
   packages/qq:
     dependencies:
       '@wsxcant/dsh-channel-telegram-gateway':
-        specifier: 0.3.0
+        specifier: 0.3.1
         version: link:../gateway
       ws:
         specifier: ^8.18.0
@@ -118,7 +121,7 @@ importers:
   packages/wechat:
     dependencies:
       '@wsxcant/dsh-channel-telegram-gateway':
-        specifier: 0.3.0
+        specifier: 0.3.1
         version: link:../gateway
 
 packages:

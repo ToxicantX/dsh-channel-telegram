@@ -4,11 +4,11 @@
 
 `dsh-channel-telegram` 用于把 DeepSeek Harness Host 接入 Telegram 私聊、QQ 官方机器人 C2C 消息以及微信 iLink 私聊。三个渠道共用同一套经过鉴权的 DSH 控制面，用于选择主机、项目和会话。
 
-`0.4.0` 版本包含：
+`0.4.1` 版本包含：
 
-- Telegram 内联菜单和进度消息编辑。
+- Telegram 内联菜单、进度消息编辑以及图片/文本文件入站。
 - QQ 原生 C2C 按钮、交互回调以及数字文本回退菜单。
-- 基于腾讯 MIT 许可的 `@tencent-weixin/openclaw-weixin@2.4.6` transport 适配的独立 DSH 微信实现。
+- 基于腾讯 MIT 许可的 `@tencent-weixin/openclaw-weixin@2.4.6` transport 适配的独立 DSH 微信实现，支持图片和文本文件入站。
 - 中文渐进式菜单：只有选择上一级目标后才显示下一级按钮。
 - 独立的“状态”按钮，用于查看当前主机、项目、会话和会话状态。
 
@@ -26,7 +26,7 @@
 将已发布的 Host 插件安装到 `web` Profile：
 
 ```bash
-dsh plugin --profile web add dsh-channel-telegram@0.4.0
+dsh plugin --profile web add dsh-channel-telegram@0.4.1
 ```
 
 安装后重启当前 DSH Web Host 或桌面端，然后进入“设置 → 插件”配置各个渠道。升级时用相同命令安装目标固定版本，重启 DSH，并在插件列表中确认版本。凭据仍保存在 DSH Credential Storage 中，不会写入仓库或 composition 配置。
@@ -35,10 +35,10 @@ dsh plugin --profile web add dsh-channel-telegram@0.4.0
 
 | 软件包 | 版本 | 用途 |
 | --- | --- | --- |
-| `dsh-channel-telegram` | `0.4.0` | DSH Host 插件和 Web 设置卡 |
-| `@wsxcant/dsh-channel-telegram-gateway` | `0.3.0` | 共享菜单、路由和会话转发 |
-| `@wsxcant/dsh-channel-qq` | `0.2.0` | QQ 官方机器人 C2C transport |
-| `@wsxcant/dsh-channel-wechat` | `0.1.0` | 微信 iLink 私聊 transport |
+| `dsh-channel-telegram` | `0.4.1` | DSH Host 插件和 Web 设置卡 |
+| `@wsxcant/dsh-channel-telegram-gateway` | `0.3.1` | 共享菜单、路由和会话转发 |
+| `@wsxcant/dsh-channel-qq` | `0.2.1` | QQ 官方机器人 C2C transport |
+| `@wsxcant/dsh-channel-wechat` | `0.1.1` | 微信 iLink 私聊 transport |
 
 ## 在 DSH Web 中配置
 
@@ -83,7 +83,7 @@ QQ 会优先发送原生 C2C 按钮；如果 QQ API 拒绝 keyboard，请求会�
 
 二维码凭据、cursor、context token 和 typing 状态会序列化到固定的只写 DSH CredentialRef `DSH_CHANNEL_TELEGRAM_WECHAT_ILINK`。原始二维码 URL、验证码和 Token 不会写入普通设置，也不会以明文返回浏览器。
 
-微信目前使用数字文本菜单，因为 iLink 私聊没有提供本插件在 QQ 中使用的原生 keyboard。微信群聊和媒体转发不在当前 V1 范围内。
+微信目前使用数字文本菜单，因为 iLink 私聊没有提供本插件在 QQ 中使用的原生 keyboard。Telegram 和微信每条消息可接收一张图片或一个 TXT/CSV/JSON/Markdown 文本文件。QQ 媒体事件以及 PDF、压缩包、Office 文件等其他二进制附件暂不支持。
 
 ## Composition 默认配置
 
@@ -153,6 +153,9 @@ QQ 会优先发送原生 C2C 按钮；如果 QQ API 拒绝 keyboard，请求会�
 | 能力 | Telegram | QQ | 微信 |
 | --- | --- | --- | --- |
 | 私聊/C2C 文本 | 支持 | 支持 | 支持 |
+| 入站图片 | 支持 | 不支持 | 支持 |
+| 入站文本文件（TXT/CSV/JSON/MD） | 支持 | 不支持 | 支持 |
+| 其他二进制附件 | 不支持 | 不支持 | 不支持 |
 | 原生按钮 | Inline keyboard | C2C keyboard | 不支持，使用数字菜单 |
 | 数字文本回退 | 支持 | 支持 | 支持 |
 | allowlist 身份 | 数字用户 ID | 事件 OpenID | iLink 用户 ID |
@@ -160,7 +163,7 @@ QQ 会优先发送原生 C2C 按钮；如果 QQ API 拒绝 keyboard，请求会�
 | 进度展示 | 编辑同一条消息 | 节流发送阶段消息 | typing + 一个过程节点 |
 | 已选会话转发 | 支持 | 支持 | 支持 |
 
-只有 allowlist 中的用户能够进入 DSH 控制面。回调 Token 使用不透明值，并绑定具体用户和会话；Token 只能使用一次且会自动过期。
+只有 allowlist 中的用户能够进入 DSH 控制面。回调 Token 使用不透明值，并绑定具体用户和会话；Token 只能使用一次且会自动过期。所选会话忙碌时，新消息会作为 FIFO 的下一轮 follow-up 被接受，不会中断当前 turn；Telegram、QQ 和微信会立即显示“已加入队列”，轮到后再开始新 turn。`/stop` 仍立即执行，并保留已排队的 inbox。
 
 ## 故障排查
 

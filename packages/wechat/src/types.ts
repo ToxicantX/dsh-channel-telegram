@@ -45,7 +45,7 @@ export interface CDNMedia {
 export interface WireMessageItem {
   readonly type?: number;
   readonly text_item?: { readonly text?: string };
-  readonly image_item?: { readonly media?: CDNMedia; readonly thumb_media?: CDNMedia; readonly aeskey?: string; readonly url?: string; readonly thumb_width?: number; readonly thumb_height?: number };
+  readonly image_item?: { readonly media?: CDNMedia; readonly thumb_media?: CDNMedia; readonly aeskey?: string; readonly url?: string; readonly thumb_width?: number; readonly thumb_height?: number; readonly mid_size?: number | string; readonly hd_size?: number | string };
   readonly voice_item?: { readonly media?: CDNMedia; readonly text?: string; readonly playtime?: number; readonly encode_type?: number };
   readonly file_item?: { readonly media?: CDNMedia; readonly file_name?: string; readonly md5?: string; readonly len?: string };
   readonly video_item?: { readonly media?: CDNMedia; readonly thumb_media?: CDNMedia; readonly play_length?: number; readonly thumb_width?: number; readonly thumb_height?: number };
@@ -118,10 +118,17 @@ export type WechatIncomingMessage = IncomingMessage;
 export type WechatStorage = Storage;
 export type WechatSdkOptions = WeChatBotOptions;
 
+export interface DownloadedMedia {
+  readonly data: Uint8Array;
+  readonly type: "image" | "file" | "video" | "voice";
+  readonly fileName?: string;
+}
+
 export interface WechatBotLike {
   onMessage(handler: (message: IncomingMessage) => void | Promise<void>): unknown;
   reply(message: IncomingMessage, content: SendContent): Promise<void>;
   send(userId: string, content: SendContent): Promise<void>;
   sendTyping(userId: string): Promise<void>;
   stopTyping(userId: string): Promise<void>;
+  download(message: IncomingMessage): Promise<DownloadedMedia | null>;
 }

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Context } from "@deepseek-ai/cordis";
+import type { ImageMediaType } from "@deepseek-ai/dsh-attachment";
 import { installModelSelection, type Agent, type AgentHandle } from "@deepseek-ai/dsh-agent";
 import { resolveSessionPreset } from "@deepseek-ai/dsh-agent-presets";
 import type {} from "@deepseek-ai/dsh-agent-default-model";
@@ -7,7 +8,7 @@ import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionId, type SessionEvent, type TurnEndReason } from "@deepseek-ai/dsh-session";
 import type {} from "@deepseek-ai/dsh-session-query";
 import { WorkspaceId } from "@deepseek-ai/dsh-workspace";
-import type { AgentPresetSummary, ComputerSummary, DshPort, ProjectSummary, SessionSummary, TurnProgress, TurnProgressListener, TurnResult } from "@wsxcant/dsh-channel-telegram-gateway";
+import type { AgentPresetSummary, ComputerSummary, DshInboundAttachment, DshPort, ProjectSummary, SessionSummary, TurnProgress, TurnProgressListener, TurnResult } from "@wsxcant/dsh-channel-telegram-gateway";
 
 export interface DshAdapterOptions {
   readonly turnTimeoutMs: number;
@@ -64,6 +65,8 @@ export class CorrelatedTurnCollector {
 function visibleText(content: readonly { readonly type: string; readonly text?: string }[]): string {
   return content.filter((block) => block.type === "text").map((block) => block.text ?? "").join("");
 }
+
+function isImageMediaType(value: string): value is ImageMediaType { return value === "image/png" || value === "image/jpeg" || value === "image/webp" || value === "image/gif"; }
 
 function errorText(reason: TurnEndReason): string {
   return reason.kind === "error" ? "DSH turn failed." : "";
@@ -239,9 +242,10 @@ export class DshAdapter implements DshPort {
     return dispose;
   }
 
-  async send(sessionId: string, text: string, onProgress?: TurnProgressListener): Promise<TurnResult> {
+  async send(sessionId: string, text: string, onProgress?: TurnProgressListener, attachments?: readonly DshInboundAttachment[]): Promise<TurnResult> {
     const agent = await this.ensureAgent(sessionId);
-    const message = createUserMessage({ content: [{ type: "text", text }], source: { kind: "user" } });
+    const content = await this.createMessageContent(text, attachments);
+    const message = createUserMessage({ content, source: { kind: "user" } });
     const collector = new CorrelatedTurnCollector(String(message.id), sessionId);
     return new Promise<TurnResult>((resolve, reject) => {
       let settled = false;
@@ -270,6 +274,26 @@ export class DshAdapter implements DshPort {
         reject(error);
       }
     });
+  }
+
+  private async createMessageContent(text: string, attachments: readonly DshInboundAttachment[] | undefined): Promise<import("@deepseek-ai/dsh-llm").ContentBlock[]> {
+    const content: import("@deepseek-ai/dsh-llm").ContentBlock[] = [];
+    if (text !== "") content.push({ type: "text", text });
+    for (const attachment of attachments ?? []) {
+      if (attachment.type === "image") {
+        if (!isImageMediaType(attachment.mediaType)) throw new Error("Unsupported image media type");
+        const ref = await this.ctx.attachments.saveImage({ data: attachment.data, mediaType: attachment.mediaType, ...(attachment.name === undefined ? {} : { name: attachment.name }) });
+        content.push({ type: "image", attachment: ref });
+      } else if (attachment.mediaType === "text/plain" || attachment.mediaType === "text/csv" || attachment.mediaType === "application/json" || attachment.mediaType === "text/markdown") {
+        const value = new TextDecoder().decode(attachment.data);
+        if (value.length > 200_000) throw new Error("Text attachment is too large");
+        content.push({ type: "text", text: "\n\n[Attached file: " + (attachment.name ?? "unnamed") + "]\n" + value });
+      } else {
+        throw new Error("This file type is not supported by the current DSH attachment model");
+      }
+    }
+    if (content.length === 0) content.push({ type: "text", text: "" });
+    return content;
   }
 
   async status(sessionId: string): Promise<SessionSummary["status"]> { return this.liveStatus(sessionId); }

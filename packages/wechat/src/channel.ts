@@ -1,4 +1,4 @@
-import { BoundedIdSet, KeyedSerialQueue, type ControlReply, type DshControlPlane, type TurnProgress } from "@wsxcant/dsh-channel-telegram-gateway";
+import { BoundedIdSet, KeyedSerialQueue, type ControlReply, type DshControlPlane, type DshInboundAttachment, type TurnProgress } from "@wsxcant/dsh-channel-telegram-gateway";
 import { WechatProgressReporter } from "./progress.js";
 import type { WechatBotLike, WechatIncomingMessage } from "./types.js";
 
@@ -16,7 +16,18 @@ export interface WechatPrivateChannelOptions {
   readonly menuTtlMs?: number;
   readonly now?: () => number;
   readonly onInbound?: () => void;
+  readonly maxAttachmentCount?: number;
+  readonly maxAttachmentBytes?: number;
+  readonly allowedImageMimeTypes?: readonly string[];
+  readonly allowedFileMimeTypes?: readonly string[];
 }
+
+const DEFAULT_MAX_ATTACHMENT_COUNT = 1;
+const DEFAULT_MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+const DEFAULT_IMAGE_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
+const DEFAULT_FILE_MIME_TYPES = ["text/plain", "text/csv", "application/json", "text/markdown"] as const;
+const MEDIA_FAILURE_REPLY = "无法读取你发送的图片或文件，请检查文件类型和大小后重试。";
+
 
 export class WechatPrivateChannel {
   private readonly allowed: Set<string>;
@@ -26,6 +37,10 @@ export class WechatPrivateChannel {
   private readonly external = new Map<string, { readonly sessionId: string; readonly turn: number; readonly reporter: WechatProgressReporter }>();
   private readonly now: () => number;
   private readonly menuTtlMs: number;
+  private readonly maxAttachmentCount: number;
+  private readonly maxAttachmentBytes: number;
+  private readonly allowedImageMimeTypes: ReadonlySet<string>;
+  private readonly allowedFileMimeTypes: ReadonlySet<string>;
   private readonly unsubscribeProgress: () => void;
   private attached = false;
   private disposed = false;
@@ -36,6 +51,12 @@ export class WechatPrivateChannel {
     this.allowed = new Set(values);
     this.now = options.now ?? Date.now;
     this.menuTtlMs = options.menuTtlMs ?? 10 * 60_000;
+    this.maxAttachmentCount = options.maxAttachmentCount ?? DEFAULT_MAX_ATTACHMENT_COUNT;
+    this.maxAttachmentBytes = options.maxAttachmentBytes ?? DEFAULT_MAX_ATTACHMENT_BYTES;
+    if (!Number.isSafeInteger(this.maxAttachmentCount) || this.maxAttachmentCount < 1) throw new Error("maxAttachmentCount must be positive");
+    if (!Number.isSafeInteger(this.maxAttachmentBytes) || this.maxAttachmentBytes < 1) throw new Error("maxAttachmentBytes must be positive");
+    this.allowedImageMimeTypes = new Set((options.allowedImageMimeTypes ?? DEFAULT_IMAGE_MIME_TYPES).map((value) => value.toLowerCase()));
+    this.allowedFileMimeTypes = new Set((options.allowedFileMimeTypes ?? DEFAULT_FILE_MIME_TYPES).map((value) => value.toLowerCase()));
     this.unsubscribeProgress = options.control.onSessionProgress((event) => this.handleExternalProgress(event.actorId, event.conversationId, event.progress));
   }
 
@@ -46,6 +67,7 @@ export class WechatPrivateChannel {
   }
 
   handleMessage(message: WechatIncomingMessage): Promise<void> {
+    if (this.allowed.has(message.userId) && isDirectTurnMessage(message)) return this.processMessage(message);
     return this.queues.run(message.userId, () => this.processMessage(message));
   }
 
@@ -60,16 +82,21 @@ export class WechatPrivateChannel {
   private async processMessage(message: WechatIncomingMessage): Promise<void> {
     if (this.disposed) return;
     this.options.onInbound?.();
-    if (message.type !== "text" || message.text.trim() === "") return;
     const updateId = messageKey(message);
     if (!this.seen.addIfNew(updateId)) return;
     const normalized = message.text.trim().toLowerCase();
     if (!this.allowed.has(message.userId)) {
-      if (this.options.identityLookupEnabled === true && normalized === "/userid") {
+      if (this.options.identityLookupEnabled === true && message.type === "text" && normalized === "/userid") {
         await this.options.bot.reply(message, "你的微信 iLink 用户 ID：\n" + message.userId);
       }
       return;
     }
+
+    let attachments: readonly DshInboundAttachment[] | undefined;
+    if (message.type === "image" || message.type === "file") {
+      attachments = await this.downloadAttachments(message);
+      if (attachments === undefined) return;
+    } else if (message.type !== "text" || message.text.trim() === "") return;
 
     const menuInput = normalized.startsWith("/") ? normalized.slice(1) : normalized;
     const choice = /^\d+$/u.test(normalized) ? Number(normalized) : undefined;
@@ -94,9 +121,39 @@ export class WechatPrivateChannel {
     }
 
     const reporter = new WechatProgressReporter({ bot: this.options.bot, userId: message.userId, message, shouldStop: () => this.disposed });
-    const replies = await this.options.control.handle({ updateId, actorId: message.userId, conversationId: message.userId, text: message.text }, (progress) => reporter.update(progress));
+    const replies = await this.options.control.handle({ updateId, actorId: message.userId, conversationId: message.userId, text: message.text, attachments }, (progress) => reporter.update(progress));
     if (this.disposed) return;
     for (const reply of replies) await this.sendReply(message, reply);
+  }
+
+  private async downloadAttachments(message: WechatIncomingMessage): Promise<readonly DshInboundAttachment[] | undefined> {
+    const declaredCount = message.images.length + message.files.length;
+    if (declaredCount < 1 || declaredCount > this.maxAttachmentCount) {
+      await this.mediaFailure(message);
+      return undefined;
+    }
+    const declaredSize = declaredMediaSize(message);
+    if (declaredSize !== undefined && declaredSize > this.maxAttachmentBytes) {
+      await this.mediaFailure(message);
+      return undefined;
+    }
+    try {
+      const media = await this.options.bot.download(message);
+      if (media === null || (media.type !== "image" && media.type !== "file")) throw new Error("unsupported media");
+      if (media.type !== message.type) throw new Error("media type mismatch");
+      if (media.data.byteLength > this.maxAttachmentBytes) throw new Error("media too large");
+      const mediaType = detectMediaType(media.type, media.fileName, media.data);
+      const allowed = media.type === "image" ? this.allowedImageMimeTypes : this.allowedFileMimeTypes;
+      if (mediaType === undefined || !allowed.has(mediaType)) throw new Error("media type is not allowed");
+      return [{ type: media.type, data: media.data, mediaType, name: media.fileName }];
+    } catch {
+      await this.mediaFailure(message);
+      return undefined;
+    }
+  }
+
+  private async mediaFailure(message: WechatIncomingMessage): Promise<void> {
+    try { await this.options.bot.reply(message, MEDIA_FAILURE_REPLY); } catch { /* delivery failure is contained */ }
   }
 
   private async sendReply(message: WechatIncomingMessage, reply: ControlReply): Promise<void> {
@@ -137,4 +194,34 @@ function progressTurn(progress: TurnProgress): number | undefined {
   }
 }
 
+function isDirectTurnMessage(message: WechatIncomingMessage): boolean {
+  if (message.type === "image" || message.type === "file") return true;
+  if (message.type !== "text") return false;
+  const normalized = message.text.trim().toLowerCase();
+  if (normalized === "" || normalized.startsWith("/") || /^\d+$/u.test(normalized)) return false;
+  return normalized !== "back" && normalized !== "b" && normalized !== "返回" && normalized !== "refresh" && normalized !== "r" && normalized !== "刷新";
+}
+
 function shortcutOfLabel(value: string): "back" | "refresh" | undefined { const normalized = value.trim().toLowerCase(); return normalized === "back" || normalized === "返回" ? "back" : normalized === "refresh" || normalized === "刷新" ? "refresh" : undefined; }
+
+function declaredMediaSize(message: WechatIncomingMessage): number | undefined {
+  const item = message.raw.item_list?.find((candidate) => candidate.type === 2 || candidate.type === 4);
+  const raw = item?.type === 2 ? item.image_item : item?.file_item;
+  const value = raw && "len" in raw ? raw.len : raw && "hd_size" in raw ? raw.hd_size : raw && "mid_size" in raw ? raw.mid_size : undefined;
+  const size = typeof value === "string" ? Number(value) : value;
+  return typeof size === "number" && Number.isSafeInteger(size) && size >= 0 ? size : undefined;
+}
+
+function detectMediaType(kind: "image" | "file", fileName: string | undefined, data: Uint8Array): string | undefined {
+  if (kind === "image") return sniffImageMime(data);
+  const extension = fileName?.toLowerCase().match(/\.([a-z0-9]{1,12})$/u)?.[1];
+  return extension === "txt" ? "text/plain" : extension === "csv" ? "text/csv" : extension === "json" ? "application/json" : extension === "md" ? "text/markdown" : undefined;
+}
+
+function sniffImageMime(data: Uint8Array): string | undefined {
+  if (data.length >= 8 && data[0] === 0x89 && data[1] === 0x50 && data[2] === 0x4e && data[3] === 0x47 && data[4] === 0x0d && data[5] === 0x0a && data[6] === 0x1a && data[7] === 0x0a) return "image/png";
+  if (data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff) return "image/jpeg";
+  if (data.length >= 6 && data[0] === 0x47 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x38 && (data[4] === 0x37 || data[4] === 0x39) && data[5] === 0x61) return "image/gif";
+  if (data.length >= 12 && data[0] === 0x52 && data[1] === 0x49 && data[2] === 0x46 && data[3] === 0x46 && data[8] === 0x57 && data[9] === 0x45 && data[10] === 0x42 && data[11] === 0x50) return "image/webp";
+  return undefined;
+}

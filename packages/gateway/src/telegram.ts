@@ -1,7 +1,7 @@
 import { Bot, InlineKeyboard, type Context } from "grammy";
 import type { GatewayReply, TelegramGateway } from "./gateway.js";
 import type { MenuView } from "./menu.js";
-import type { TurnProgress } from "./ports.js";
+import type { DshInboundAttachment, TurnProgress } from "./ports.js";
 import { ProgressMessageEditor, ProgressMessageUnavailableError } from "./progress.js";
 
 const TELEGRAM_TEXT_LIMIT = 4096;
@@ -85,29 +85,47 @@ export function createTelegramBot(token: string, gateway: TelegramGateway, optio
     else await editMenu(ctx, { text: result.answer, rows: [] });
   });
 
+  bot.on("message:photo", async (ctx) => {
+    if (!gateway.accepts({ chatType: ctx.chat.type, userId: ctx.from.id })) return;
+    const photo = ctx.message.photo.at(-1);
+    if (photo === undefined) return;
+    try {
+      const attachment = await downloadTelegramAttachment(bot, token, photo.file_id, "image", undefined, "image/jpeg");
+      await handleTelegramMessage(ctx, gateway, ctx.message.caption ?? "", [attachment], options.progressEditIntervalMs);
+    } catch { await ctx.reply("图片下载失败，请重试。"); }
+  });
+
+  bot.on("message:document", async (ctx) => {
+    if (!gateway.accepts({ chatType: ctx.chat.type, userId: ctx.from.id })) return;
+    const document = ctx.message.document;
+    try {
+      const mediaType = document.mime_type ?? mimeTypeFromName(document.file_name);
+      if (!isSupportedTelegramMediaType(mediaType)) throw new Error("Unsupported Telegram media type");
+      const attachment = await downloadTelegramAttachment(bot, token, document.file_id, mediaType.startsWith("image/") ? "image" : "file", document.file_name, mediaType);
+      await handleTelegramMessage(ctx, gateway, ctx.message.caption ?? "", [attachment], options.progressEditIntervalMs);
+    } catch { await ctx.reply("附件下载失败，请检查文件类型和大小后重试。"); }
+  });
+
   bot.on("message:text", async (ctx) => {
-    const progress = new ProgressMessageEditor({
-      send: async (text) => ({ messageId: (await ctx.reply(text)).message_id }),
-      edit: async (messageId, text) => {
-        try {
-          await ctx.api.editMessageText(ctx.chat.id, messageId, text);
-        } catch (error) {
-          if (isNotModified(error)) return;
-          if (isUnavailableEdit(error)) throw new ProgressMessageUnavailableError("Telegram progress message is unavailable", { cause: error });
-          throw error;
-        }
-      }
-    }, { intervalMs: options.progressEditIntervalMs });
-    const replies = await gateway.handle({
-      updateId: ctx.update.update_id,
-      chatId: ctx.chat.id,
-      chatType: ctx.chat.type,
-      userId: ctx.from.id,
-      text: ctx.message.text
-    }, (event) => progress.update(event));
-    for (const reply of replies) await sendReply(ctx, reply);
+    await handleTelegramMessage(ctx, gateway, ctx.message.text, undefined, options.progressEditIntervalMs);
   });
   return bot;
+}
+
+async function handleTelegramMessage(ctx: Context, gateway: TelegramGateway, text: string, attachments: readonly DshInboundAttachment[] | undefined, intervalMs: number | undefined): Promise<void> {
+  if (ctx.chat === undefined || ctx.from === undefined) return;
+  const chatId = ctx.chat.id;
+  const chatType = ctx.chat.type;
+  const userId = ctx.from.id;
+  const progress = new ProgressMessageEditor({
+    send: async (value) => ({ messageId: (await ctx.reply(value)).message_id }),
+    edit: async (messageId, value) => {
+      try { await ctx.api.editMessageText(chatId, messageId, value); }
+      catch (error) { if (isNotModified(error)) return; if (isUnavailableEdit(error)) throw new ProgressMessageUnavailableError("Telegram progress message is unavailable", { cause: error }); throw error; }
+    }
+  }, { intervalMs });
+  const replies = await gateway.handle({ updateId: ctx.update.update_id, chatId, chatType, userId, text, attachments }, (event) => progress.update(event));
+  for (const reply of replies) await sendReply(ctx, reply);
 }
 
 function botProgressEditor(bot: Bot, chatId: number, intervalMs: number | undefined): ProgressMessageEditor {
@@ -123,6 +141,27 @@ function botProgressEditor(bot: Bot, chatId: number, intervalMs: number | undefi
       }
     }
   }, { intervalMs });
+}
+
+const TELEGRAM_MAX_ATTACHMENT_BYTES = 8 * 1024 * 1024;
+
+async function downloadTelegramAttachment(bot: Bot, token: string, fileId: string, type: "image" | "file", name: string | undefined, mediaType: string): Promise<DshInboundAttachment> {
+  const file = await bot.api.getFile(fileId);
+  if (file.file_path === undefined || file.file_path === "") throw new Error("Telegram file path is unavailable");
+  const response = await fetch("https://api.telegram.org/file/bot" + token + "/" + file.file_path);
+  if (!response.ok) throw new Error("Telegram file download failed");
+  const declared = Number(response.headers.get("content-length") ?? 0);
+  if (Number.isFinite(declared) && declared > TELEGRAM_MAX_ATTACHMENT_BYTES) throw new Error("Telegram file is too large");
+  const data = new Uint8Array(await response.arrayBuffer());
+  if (data.byteLength > TELEGRAM_MAX_ATTACHMENT_BYTES) throw new Error("Telegram file is too large");
+  return { type, data, mediaType, ...(name === undefined ? {} : { name }) };
+}
+
+function isSupportedTelegramMediaType(value: string): boolean { return value === "image/png" || value === "image/jpeg" || value === "image/webp" || value === "image/gif" || value === "text/plain" || value === "text/csv" || value === "application/json" || value === "text/markdown"; }
+
+function mimeTypeFromName(name: string | undefined): string {
+  const extension = name?.toLowerCase().match(/\.([a-z0-9]{1,12})$/u)?.[1];
+  return extension === "txt" ? "text/plain" : extension === "csv" ? "text/csv" : extension === "json" ? "application/json" : extension === "md" ? "text/markdown" : extension === "pdf" ? "application/pdf" : extension === "zip" ? "application/zip" : extension === "gz" ? "application/gzip" : extension === "docx" ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : extension === "xlsx" ? "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : extension === "pptx" ? "application/vnd.openxmlformats-officedocument.presentationml.presentation" : "application/octet-stream";
 }
 
 function turnOf(progress: TurnProgress): number | undefined {
