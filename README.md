@@ -4,7 +4,7 @@
 
 `dsh-channel-telegram` connects a DeepSeek Harness Host to Telegram private chats, QQ Official Bot C2C messages, and WeChat iLink private chats. All three channels share the same authenticated DSH control plane for host, project, and session selection.
 
-Version `0.4.1` includes:
+Version `0.4.2` includes:
 
 - Telegram inline menus, progress-message editing, and inbound images/text files.
 - QQ native C2C keyboards, interaction callbacks, and a numbered-text fallback.
@@ -26,7 +26,7 @@ Version `0.4.1` includes:
 Install the published Host plugin into the `web` profile:
 
 ```bash
-dsh plugin --profile web add dsh-channel-telegram@0.4.1
+dsh plugin --profile web add dsh-channel-telegram@0.4.2
 ```
 
 Restart the active DSH Web Host or the desktop application after installation. Open **Settings → Plugins** to configure each channel. To upgrade, install the desired pinned version with the same command, restart DSH, and confirm the installed version in the plugin list. Credentials remain in DSH credential storage instead of the repository or composition file.
@@ -35,7 +35,7 @@ Published packages:
 
 | Package | Version | Purpose |
 | --- | --- | --- |
-| `dsh-channel-telegram` | `0.4.1` | DSH Host plugin and Web settings cards |
+| `dsh-channel-telegram` | `0.4.2` | DSH Host plugin and Web settings cards |
 | `@wsxcant/dsh-channel-telegram-gateway` | `0.3.1` | Shared menus, routing, and session relay |
 | `@wsxcant/dsh-channel-qq` | `0.2.1` | QQ Official Bot C2C transport |
 | `@wsxcant/dsh-channel-wechat` | `0.1.1` | WeChat iLink private-chat transport |

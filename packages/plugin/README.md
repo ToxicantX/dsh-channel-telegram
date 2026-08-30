@@ -6,9 +6,9 @@ Full configuration guides and sanitized DSH Web screenshots: [English](https://g
 
 ## Install
 
-The 0.4.1 release contains Telegram, QQ, and the experimental WeChat transport. Publish npm packages in dependency order: `@wsxcant/dsh-channel-telegram-gateway@0.3.1`, `@wsxcant/dsh-channel-qq@0.2.1`, `@wsxcant/dsh-channel-wechat@0.1.1`, then `dsh-channel-telegram@0.4.1`, before installing this package from the registry:
+The 0.4.2 release contains Telegram, QQ, and the experimental WeChat transport. Publish npm packages in dependency order: `@wsxcant/dsh-channel-telegram-gateway@0.3.1`, `@wsxcant/dsh-channel-qq@0.2.1`, `@wsxcant/dsh-channel-wechat@0.1.1`, then `dsh-channel-telegram@0.4.2`, before installing this package from the registry:
 
-    dsh plugin --profile web add dsh-channel-telegram@0.4.1
+    dsh plugin --profile web add dsh-channel-telegram@0.4.2
 
 For source-checkout verification, link the profile dependency to this package and rebuild the workspace. The DSH plugin manager installs a published package and adds its bundled composition patch to the profile. Restart the active DSH Web Host, then configure Telegram, QQ, and experimental WeChat under Settings > Plugins.
 

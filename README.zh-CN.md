@@ -4,7 +4,7 @@
 
 `dsh-channel-telegram` 用于把 DeepSeek Harness Host 接入 Telegram 私聊、QQ 官方机器人 C2C 消息以及微信 iLink 私聊。三个渠道共用同一套经过鉴权的 DSH 控制面，用于选择主机、项目和会话。
 
-`0.4.1` 版本包含：
+`0.4.2` 版本包含：
 
 - Telegram 内联菜单、进度消息编辑以及图片/文本文件入站。
 - QQ 原生 C2C 按钮、交互回调以及数字文本回退菜单。
@@ -26,7 +26,7 @@
 将已发布的 Host 插件安装到 `web` Profile：
 
 ```bash
-dsh plugin --profile web add dsh-channel-telegram@0.4.1
+dsh plugin --profile web add dsh-channel-telegram@0.4.2
 ```
 
 安装后重启当前 DSH Web Host 或桌面端，然后进入“设置 → 插件”配置各个渠道。升级时用相同命令安装目标固定版本，重启 DSH，并在插件列表中确认版本。凭据仍保存在 DSH Credential Storage 中，不会写入仓库或 composition 配置。
@@ -35,7 +35,7 @@ dsh plugin --profile web add dsh-channel-telegram@0.4.1
 
 | 软件包 | 版本 | 用途 |
 | --- | --- | --- |
-| `dsh-channel-telegram` | `0.4.1` | DSH Host 插件和 Web 设置卡 |
+| `dsh-channel-telegram` | `0.4.2` | DSH Host 插件和 Web 设置卡 |
 | `@wsxcant/dsh-channel-telegram-gateway` | `0.3.1` | 共享菜单、路由和会话转发 |
 | `@wsxcant/dsh-channel-qq` | `0.2.1` | QQ 官方机器人 C2C transport |
 | `@wsxcant/dsh-channel-wechat` | `0.1.1` | 微信 iLink 私聊 transport |
