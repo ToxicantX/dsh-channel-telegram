@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { Context } from "@deepseek-ai/cordis";
 import type { ImageMediaType } from "@deepseek-ai/dsh-attachment";
 import { installModelSelection, type Agent, type AgentHandle } from "@deepseek-ai/dsh-agent";
-import { resolveSessionPreset } from "@deepseek-ai/dsh-agent-presets";
+import { agentPresetProjectionDefinition } from "@deepseek-ai/dsh-agent-presets";
 import type {} from "@deepseek-ai/dsh-agent-default-model";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
 import { SessionId, type SessionEvent, type TurnEndReason } from "@deepseek-ai/dsh-session";
@@ -326,13 +326,14 @@ export class DshAdapter implements DshPort {
     const existing = this.ctx.agents.get(sessionId);
     if (existing !== undefined) return existing;
     const snapshot = await this.ctx.sessionQuery.readSession(sessionId);
-    const presetId = resolveSessionPreset({ header: snapshot.session, events: snapshot.events });
+    let presetId = agentPresetProjectionDefinition.init(snapshot.session);
+    for (const event of snapshot.events) presetId = agentPresetProjectionDefinition.apply(presetId, event);
     const selection = this.ctx.agentDefaultModel.currentSelection();
     const handle = await this.ctx.agents.resume({
       resumeSessionId: sessionId,
       agentOptions: { provider: selection.provider, model: selection.model },
       setup: async (agentCtx) => {
-        if (presetId !== undefined) await this.ctx.agentPresets.mount(agentCtx, presetId);
+        if (presetId !== null) await this.ctx.agentPresets.mount(agentCtx, presetId);
         installModelSelection(agentCtx, { current: selection, assembled: undefined });
       }
     });

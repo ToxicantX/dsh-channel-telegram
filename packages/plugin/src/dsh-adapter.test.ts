@@ -86,6 +86,44 @@ describe("DshAdapter.send", () => {
     expect(disposed).toBe(1);
     expect(listener).toBeUndefined();
   });
+
+  it("resumes a persisted session with its latest projected agent preset", async () => {
+    type EventListener = (session: { id: string }, event: SessionEvent) => void;
+    let listener: EventListener | undefined;
+    let mounted: string | undefined;
+    const session = { id: "session-target" };
+    const agent = {
+      status: "idle",
+      followup(message: { id: string }) {
+        listener?.(session, envelope("turn/start", { turn: 1 }));
+        listener?.(session, envelope("user/message", { id: message.id }));
+        listener?.(session, envelope("turn/end", { turn: 1, reason: { kind: "completed" } }));
+      }
+    };
+    const ctx = {
+      agents: {
+        get: () => undefined,
+        resume: async (options: any) => {
+          await options.setup({ on: () => () => true } as unknown as Context);
+          return { agent, dispose: async () => undefined };
+        }
+      },
+      sessionQuery: {
+        readSession: async () => ({
+          session: { version: 0, id: session.id, createdAt: 1, isSeeded: false, agentPreset: "initial" },
+          events: [envelope("agent-preset/selected", { agentPreset: "selected" })]
+        })
+      },
+      agentDefaultModel: { currentSelection: () => ({ provider: "provider", model: "model" }) },
+      agentPresets: { mount: async (_agentCtx: Context, presetId: string) => { mounted = presetId; } },
+      on: (_event: string, value: EventListener) => { listener = value; return () => { listener = undefined; }; }
+    } as unknown as Context;
+
+    const adapter = new DshAdapter(ctx, { turnTimeoutMs: 1000, hostName: "Build Host" });
+    await expect(adapter.send(session.id, "hello")).resolves.toEqual({ text: "", reason: "completed", turn: 1 });
+    expect(mounted).toBe("selected");
+    await adapter.dispose();
+  });
 });
 
 describe("ObservedTurnCollector", () => {

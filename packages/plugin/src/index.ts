@@ -1,7 +1,7 @@
 import type { Context } from "@deepseek-ai/cordis";
 import z from "@deepseek-ai/schemastery";
 import { credentialRef } from "@deepseek-ai/dsh-credentials";
-import { installSettingsSection, settingsNamespace } from "@deepseek-ai/dsh-settings";
+import type {} from "@deepseek-ai/dsh-settings";
 import { QQAccessTokenManager, QQC2CChannel, QQGatewayConnection, QQOpenApiClient } from "@wsxcant/dsh-channel-qq";
 import { WeChatBot, WechatPrivateChannel } from "@wsxcant/dsh-channel-wechat";
 import { DshControlPlane, TelegramGateway, createTelegramBot, registerTelegramCommands, sendTelegramDiagnosticReady } from "@wsxcant/dsh-channel-telegram-gateway";
@@ -18,9 +18,9 @@ export const inject = [
 
 export const TELEGRAM_BOT_TOKEN_REF = "TELEGRAM_BOT_TOKEN";
 export const QQ_BOT_APP_SECRET_REF = "QQ_BOT_APP_SECRET";
-export const TELEGRAM_SETTINGS_NAMESPACE = settingsNamespace("telegram");
-export const QQ_SETTINGS_NAMESPACE = settingsNamespace("qq");
-export const WECHAT_SETTINGS_NAMESPACE = settingsNamespace("wechat");
+export const TELEGRAM_SETTINGS_NAMESPACE = "telegram";
+export const QQ_SETTINGS_NAMESPACE = "qq";
+export const WECHAT_SETTINGS_NAMESPACE = "wechat";
 export const DEFAULT_HOST_NAME = "Local DSH";
 
 export interface Config {
@@ -167,7 +167,7 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     let controller!: WechatLoginController;
     controller = new WechatLoginController({
       storage,
-      botFactory: (sdkStorage) => new WeChatBot({ storage: sdkStorage, logLevel: "warn", botAgent: "DSHChannel/0.4.0" }) as ManagedWechatBot,
+      botFactory: (sdkStorage) => new WeChatBot({ storage: sdkStorage, logLevel: "warn", botAgent: "DSHChannel/0.5.0" }) as ManagedWechatBot,
       channelFactory: (bot) => {
         if (settings.allowedUserIds.length === 0 && !settings.identityLookupEnabled) return { attach: () => undefined, dispose: () => undefined };
         const adapter = new DshAdapter(ctx, { turnTimeoutMs: config.turnTimeoutMs, hostName: runtimeHostName(telegramSource().hostName) });
@@ -185,16 +185,18 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
   const scheduleQQ = (): void => { if (!active) return; qqQueue = qqQueue.then(reconcileQQ, reconcileQQ).catch((error: unknown) => { logger.error(error); }); };
   const scheduleWechat = (): void => { if (!active) return; wechatQueue = wechatQueue.then(reconcileWechat, reconcileWechat).catch((error: unknown) => { logger.error(error); }); };
 
-  installSettingsSection(ctx, TELEGRAM_SETTINGS_NAMESPACE, TelegramSettingsSchema, { allowedUserIds: config.allowedUserIds, hostName: config.hostName }, { setSource: (current) => { telegramSource = current; }, onChange: () => { scheduleTelegram(); scheduleQQ(); } });
-  installSettingsSection(ctx, QQ_SETTINGS_NAMESPACE, QQSettingsSchema, { appId: config.qqAppId, allowedOpenIds: config.qqAllowedOpenIds, progressIntervalMs: config.qqProgressIntervalMs, openIdLookupEnabled: config.qqOpenIdLookupEnabled }, { setSource: (current) => { qqSource = current; }, onChange: scheduleQQ });
-  installSettingsSection(ctx, WECHAT_SETTINGS_NAMESPACE, WechatSettingsSchema, { allowedUserIds: config.wechatAllowedUserIds, identityLookupEnabled: config.wechatIdentityLookupEnabled }, { setSource: (current) => { wechatSource = current; }, onChange: scheduleWechat });
+  ctx.inject(["settings"], (settingsCtx) => {
+    settingsCtx.settings.installSection(ctx, TELEGRAM_SETTINGS_NAMESPACE, TelegramSettingsSchema, { allowedUserIds: config.allowedUserIds, hostName: config.hostName }, { setSource: (current) => { telegramSource = current; }, onChange: () => { scheduleTelegram(); scheduleQQ(); } });
+    settingsCtx.settings.installSection(ctx, QQ_SETTINGS_NAMESPACE, QQSettingsSchema, { appId: config.qqAppId, allowedOpenIds: config.qqAllowedOpenIds, progressIntervalMs: config.qqProgressIntervalMs, openIdLookupEnabled: config.qqOpenIdLookupEnabled }, { setSource: (current) => { qqSource = current; }, onChange: scheduleQQ });
+    settingsCtx.settings.installSection(ctx, WECHAT_SETTINGS_NAMESPACE, WechatSettingsSchema, { allowedUserIds: config.wechatAllowedUserIds, identityLookupEnabled: config.wechatIdentityLookupEnabled }, { setSource: (current) => { wechatSource = current; }, onChange: scheduleWechat });
+  });
 
   const disposeWechatRpc = installWechatRpc(ctx, () => wechatControllers.get(ctx));
   ctx.effect(() => disposeWechatRpc, "wechat connection rpc");
 
   await ctx.effect(() => {
     active = true;
-    const stopCredentialListener = ctx.on("credentials/updated", (ref) => { if (ref === TELEGRAM_BOT_TOKEN_REF) scheduleTelegram(); if (ref === QQ_BOT_APP_SECRET_REF) scheduleQQ(); });
+    const stopCredentialListener = ctx.on("credentials/reference-updated", (ref) => { if (String(ref) === TELEGRAM_BOT_TOKEN_REF) scheduleTelegram(); if (String(ref) === QQ_BOT_APP_SECRET_REF) scheduleQQ(); });
     scheduleTelegram(); scheduleQQ(); scheduleWechat();
     return async () => { active = false; stopCredentialListener(); await Promise.all([telegramQueue, qqQueue, wechatQueue]); await Promise.all([stopTelegram(telegramRuntime), stopQQ(qqRuntime), stopWechat(wechatRuntime)]); telegramRuntime = undefined; qqRuntime = undefined; wechatRuntime = undefined; wechatControllers.delete(ctx); };
   }, "Telegram, QQ, and WeChat channel runtimes");

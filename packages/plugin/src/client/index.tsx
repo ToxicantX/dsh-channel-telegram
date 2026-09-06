@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import type { Context as ClientContext } from "@deepseek-ai/cordis";
 import type { ConnectionHandle, RpcResult } from "@deepseek-ai/dsh-client-connection/client";
-import type { ClientContext, SettingsScope } from "@deepseek-ai/dsh-client-runtime/client";
-import type {} from "@deepseek-ai/dsh-client-ui-settings/client";
+import type { SettingsScope } from "@deepseek-ai/dsh-client-ui-settings/client";
+import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type {} from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
+import type {} from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@deepseek-ai/dsh-api-remotes/client";
 import { canRemoveQQSecret, canSaveQQDraft, createQQDraft, discardQQDraft, isQQDraftDirty, parseQQSettingsDraft } from "./qq-validation.js";
 import { parseTelegramSettingsDraft } from "./validation.js";
@@ -25,7 +27,7 @@ interface WechatRemoteApi {
     logout(): Promise<RpcResult<WechatLoginStatus>>;
   };
 }
-type ApiClient = ConnectionHandle["api"];
+type ApiClient = ClientContext["remote"];
 interface TelegramCardProps { readonly api: ApiClient; readonly scope: SettingsScope<TelegramSettings>; }
 interface CredentialState { readonly configured: boolean; readonly source?: string; readonly writable: boolean; }
 const EMPTY_CREDENTIAL: CredentialState = { configured: false, writable: true };
@@ -51,9 +53,9 @@ function TelegramSettingsCard({ api, scope }: TelegramCardProps): React.JSX.Elem
   }, [snapshot.revision, snapshot.value]);
 
   const readCredential = useCallback(async (): Promise<void> => {
-    const response = await api.credentials.describe({ refs: [TOKEN_REF] });
-    if (!response.result.ok) throw new Error("Unable to read credential status");
-    setCredential(response.result.value.credentials[TOKEN_REF] ?? EMPTY_CREDENTIAL);
+    const response = await api.credentials.describe([TOKEN_REF]);
+    if (!response.ok) throw new Error("Unable to read credential status");
+    setCredential(response.value[TOKEN_REF] ?? EMPTY_CREDENTIAL);
   }, [api]);
 
   useEffect(() => { void readCredential().catch(() => { setCredential({ configured: false, writable: false }); setFailed(true); setMessage("Credential status unavailable"); }); }, [readCredential]);
@@ -80,8 +82,8 @@ function TelegramSettingsCard({ api, scope }: TelegramCardProps): React.JSX.Elem
       await scope.set("hostName", validation.value.hostName);
       await scope.set("allowedUserIds", validation.value.allowedUserIds);
       if (token.trim().length > 0) {
-        const response = await api.credentials.set({ ref: TOKEN_REF, value: token.trim() });
-        if (!response.result.ok) throw new Error("Bot Token was not accepted");
+        const response = await api.credentials.set(TOKEN_REF, token.trim());
+        if (!response.ok) throw new Error("Bot Token was not accepted");
       }
       setToken(""); await readCredential(); setDraftRevision(scope.getSnapshot().revision); setMessage("Saved");
     } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Save failed"); }
@@ -92,8 +94,8 @@ function TelegramSettingsCard({ api, scope }: TelegramCardProps): React.JSX.Elem
     if (!credential.configured || !credential.writable || busy) return;
     setBusy(true); setFailed(false); setMessage(undefined);
     try {
-      const response = await api.credentials.unset({ ref: TOKEN_REF });
-      if (!response.result.ok) throw new Error("Bot Token could not be removed");
+      const response = await api.credentials.unset(TOKEN_REF);
+      if (!response.ok) throw new Error("Bot Token could not be removed");
       setToken(""); await readCredential(); setMessage("Bot Token removed");
     } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Remove failed"); }
     finally { setBusy(false); }
@@ -140,7 +142,7 @@ function QQSettingsCard({ api, scope }: { readonly api: ApiClient; readonly scop
     setDraftRevision(draft.revision);
     setDraftInitialized(true);
   }, [draftInitialized, draftRevision, snapshot.revision, snapshot.value]);
-  const readCredential = useCallback(async (): Promise<void> => { const response = await api.credentials.describe({ refs: [QQ_SECRET_REF] }); if (!response.result.ok) throw new Error("Unable to read QQ credential status"); setCredential(response.result.value.credentials[QQ_SECRET_REF] ?? EMPTY_CREDENTIAL); }, [api]);
+  const readCredential = useCallback(async (): Promise<void> => { const response = await api.credentials.describe([QQ_SECRET_REF]); if (!response.ok) throw new Error("Unable to read QQ credential status"); setCredential(response.value[QQ_SECRET_REF] ?? EMPTY_CREDENTIAL); }, [api]);
   useEffect(() => { void readCredential().catch(() => { setCredential({ configured: false, writable: false }); setFailed(true); setMessage("QQ credential status unavailable"); }); }, [readCredential]);
   if (snapshot.value === undefined) return null;
   const validation = parseQQSettingsDraft(appId, openIds, interval, openIdLookupEnabled);
@@ -148,8 +150,8 @@ function QQSettingsCard({ api, scope }: { readonly api: ApiClient; readonly scop
   const canWrite = snapshot.status === "ready" && snapshot.writable && !busy;
   const saveDisabled = !canSaveQQDraft({ value: snapshot.value, revision: snapshot.revision }, { appId, openIds, interval, secret, openIdLookupEnabled, revision: draftRevision }, snapshot.status === "ready" && snapshot.writable, credential.writable, busy);
   const discard = (): void => { const draft = discardQQDraft({ value: snapshot.value!, revision: snapshot.revision }); setAppId(draft.appId); setOpenIds(draft.openIds); setIntervalValue(draft.interval); setOpenIdLookupEnabled(draft.openIdLookupEnabled); setSecret(draft.secret); setDraftRevision(draft.revision); setDraftInitialized(true); setMessage(undefined); setFailed(false); };
-  const save = async (): Promise<void> => { if (saveDisabled || validation.value === undefined) return; setBusy(true); setFailed(false); setMessage(undefined); try { await scope.set("appId", validation.value.appId); await scope.set("allowedOpenIds", validation.value.allowedOpenIds); await scope.set("progressIntervalMs", validation.value.progressIntervalMs); await scope.set("openIdLookupEnabled", validation.value.openIdLookupEnabled); if (secret.trim() !== "") { const response = await api.credentials.set({ ref: QQ_SECRET_REF, value: secret.trim() }); if (!response.result.ok) throw new Error("QQ AppSecret was not accepted"); } setSecret(""); await readCredential(); setDraftRevision(scope.getSnapshot().revision); setMessage("Saved"); } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Save failed"); } finally { setBusy(false); } };
-  const removeSecret = async (): Promise<void> => { if (!canRemoveQQSecret(credential.configured, credential.writable, busy)) return; setBusy(true); setFailed(false); setMessage(undefined); try { const response = await api.credentials.unset({ ref: QQ_SECRET_REF }); if (!response.result.ok) throw new Error("QQ AppSecret could not be removed"); setSecret(""); await readCredential(); setMessage("QQ AppSecret removed"); } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Remove failed"); } finally { setBusy(false); } };
+  const save = async (): Promise<void> => { if (saveDisabled || validation.value === undefined) return; setBusy(true); setFailed(false); setMessage(undefined); try { await scope.set("appId", validation.value.appId); await scope.set("allowedOpenIds", validation.value.allowedOpenIds); await scope.set("progressIntervalMs", validation.value.progressIntervalMs); await scope.set("openIdLookupEnabled", validation.value.openIdLookupEnabled); if (secret.trim() !== "") { const response = await api.credentials.set(QQ_SECRET_REF, secret.trim()); if (!response.ok) throw new Error("QQ AppSecret was not accepted"); } setSecret(""); await readCredential(); setDraftRevision(scope.getSnapshot().revision); setMessage("Saved"); } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Save failed"); } finally { setBusy(false); } };
+  const removeSecret = async (): Promise<void> => { if (!canRemoveQQSecret(credential.configured, credential.writable, busy)) return; setBusy(true); setFailed(false); setMessage(undefined); try { const response = await api.credentials.unset(QQ_SECRET_REF); if (!response.ok) throw new Error("QQ AppSecret could not be removed"); setSecret(""); await readCredential(); setMessage("QQ AppSecret removed"); } catch (error) { setFailed(true); setMessage(error instanceof Error ? error.message : "Remove failed"); } finally { setBusy(false); } };
   const credentialLabel = credential.configured ? "AppSecret configured" + (credential.source ? " via " + credential.source : "") : "AppSecret not configured";
   return <li className={open ? "dct-card dct-open" : "dct-card"}>
     <button type="button" className="dct-header" aria-expanded={open} aria-controls="dct-body-qq" aria-label={(open ? "Collapse" : "Expand") + " settings: QQ"} onClick={() => setOpen((value) => !value)}><span className="dct-header-copy"><strong id="dct-title-qq">QQ</strong><span className={credential.configured ? "dct-status dct-ready" : "dct-status"}>{credentialLabel}</span></span>{dirty && <span className="dct-unsaved">Unsaved</span>}<span className={open ? "dct-chevron dct-chevron-open" : "dct-chevron"} aria-hidden="true" /></button>
@@ -232,19 +234,19 @@ const CSS = [
   ".dct-wechat-meta{display:flex;flex-direction:column;gap:4px;padding:12px 0;color:var(--dsw-alias-label-secondary);font-size:12px;overflow-wrap:anywhere}.dct-qr{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 0;border-bottom:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-secondary)}.dct-qr img{width:200px;max-width:100%;aspect-ratio:1;object-fit:contain;background:#fff;border-radius:8px;padding:8px}.dct-toggle{display:flex;align-items:center;gap:8px;padding:12px 0;border-top:1px solid var(--dsw-alias-border-l2);color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500}.dct-toggle input{width:16px;height:16px;margin:0;accent-color:var(--dsw-alias-brand-primary)}.dct-error{color:var(--dsw-alias-label-error);font-size:12px;font-weight:400}.dct-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap;padding:12px 0 4px;border-top:1px solid var(--dsw-alias-border-l2)}.dct-action-message{margin-right:auto;min-width:0}.dct-actions button{appearance:none;border:1px solid transparent;border-radius:8px;padding:5px 14px;font:inherit;font-size:13px;line-height:1.5;cursor:pointer}.dct-actions button:disabled{opacity:.4;cursor:default}.dct-primary{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-layer-3)}.dct-secondary{border-color:var(--dsw-alias-border-l2);background:transparent;color:var(--dsw-alias-label-secondary)}.dct-secondary:hover:not(:disabled){color:var(--dsw-alias-label-primary);border-color:var(--dsw-alias-label-dimmed)}.dct-primary:focus-visible,.dct-secondary:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}.dct-message{font-size:12px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}@media(max-width:520px){.dct-actions{align-items:stretch}.dct-action-message{width:100%;margin-right:0}.dct-actions button{flex:1 1 auto}}"
 ].join("");
 
-export const inject = ["slots", "connection", "remote", "settingsScope"];
+export const inject = ["slots", "connection", "remote", "remote.credentials", "settingsScope"];
 
 export async function apply(ctx: ClientContext): Promise<void> {
   const connection = ctx.get("connection");
-  const { api } = connection;
+  const api = ctx.remote;
   const wechatRemote = createWechatRpcApi(connection);
   const scope = ctx.settingsScope.bind<TelegramSettings>({ namespace: SETTINGS_NAMESPACE });
   const qqScope = ctx.settingsScope.bind<QQSettings>({ namespace: QQ_SETTINGS_NAMESPACE });
   const wechatScope = ctx.settingsScope.bind<WechatSettings>({ namespace: WECHAT_SETTINGS_NAMESPACE });
   ctx.effect(() => { const tag = document.createElement("style"); tag.dataset.plugin = "dsh-channel-telegram"; tag.textContent = CSS; document.head.appendChild(tag); return () => tag.remove(); }, "telegram settings styles");
-  ctx.effect(function* () {
+  ctx.slots.inject("settings.plugin.item", function* () {
     yield ctx.slots.register({ name: "settings.plugin.item", key: SETTINGS_NAMESPACE, inject: () => ({ api, scope }) }, TelegramSettingsCard);
     yield ctx.slots.register({ name: "settings.plugin.item", key: QQ_SETTINGS_NAMESPACE, inject: () => ({ api, scope: qqScope }) }, QQSettingsCard);
+    yield ctx.slots.register({ name: "settings.plugin.item", key: WECHAT_SETTINGS_NAMESPACE, inject: () => ({ remote: wechatRemote, scope: wechatScope }) }, WechatSettingsCard);
   });
-  ctx.effect(function* () { yield ctx.slots.register({ name: "settings.plugin.item", key: WECHAT_SETTINGS_NAMESPACE, inject: () => ({ remote: wechatRemote, scope: wechatScope }) }, WechatSettingsCard); });
 }
