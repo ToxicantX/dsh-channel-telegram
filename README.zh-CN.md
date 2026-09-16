@@ -2,6 +2,8 @@
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
+[![npm version](https://img.shields.io/npm/v/dsh-channel-telegram?label=npm)](https://www.npmjs.com/package/dsh-channel-telegram) [![npm downloads](https://img.shields.io/npm/dm/dsh-channel-telegram?label=downloads)](https://www.npmjs.com/package/dsh-channel-telegram) [![license](https://img.shields.io/badge/license-MIT-green)](https://www.npmjs.com/package/dsh-channel-telegram) [![GitHub stars](https://img.shields.io/github/stars/ToxicantX/dsh-channel-telegram)](https://github.com/ToxicantX/dsh-channel-telegram/stargazers) [![GitHub issues](https://img.shields.io/github/issues/ToxicantX/dsh-channel-telegram)](https://github.com/ToxicantX/dsh-channel-telegram/issues) [![Node.js >=22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](https://nodejs.org/) [![DSH 0.1.6-alpha.1](https://img.shields.io/badge/dsh-0.1.6--alpha.1-4caf50)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1)
+
 `dsh-channel-telegram` 用于把 DeepSeek Harness Host 接入 Telegram 私聊、QQ 官方机器人 C2C 消息以及微信 iLink 私聊。三个渠道共用同一套经过鉴权的 DSH 控制面，用于选择主机、项目和会话。
 
 `0.5.1` 版本包含：
