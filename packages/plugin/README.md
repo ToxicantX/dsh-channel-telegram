@@ -2,7 +2,7 @@
 
 Cordis Host composition plugin for Telegram, QQ, and experimental WeChat iLink channels. Version 0.5.1 is verified against DSH 0.1.6-alpha.1.
 
-Full configuration guides and sanitized DSH Web screenshots: [English](https://github.com/ToxicantX/dsh-channel-telegram#readme) | [简体中文](https://github.com/ToxicantX/dsh-channel-telegram/blob/main/README.zh-CN.md)
+Full configuration guides and sanitized DSH Web screenshots: [简体中文](https://github.com/ToxicantX/dsh-channel-telegram#readme) | [English](https://github.com/ToxicantX/dsh-channel-telegram/blob/main/README.en.md)
 
 ## Install
 
