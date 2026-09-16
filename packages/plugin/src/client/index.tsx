@@ -4,7 +4,6 @@ import type { ConnectionHandle, RpcResult } from "@deepseek-ai/dsh-client-connec
 import type { SettingsScope } from "@deepseek-ai/dsh-client-ui-settings/client";
 import type {} from "@deepseek-ai/dsh-client-ui-renderer/client";
 import type {} from "@deepseek-ai/dsh-client-ui-settings-plugins/client";
-import type {} from "@deepseek-ai/dsh-client-ui-slots";
 import type {} from "@deepseek-ai/dsh-api-remotes/client";
 import { canRemoveQQSecret, canSaveQQDraft, createQQDraft, discardQQDraft, isQQDraftDirty, parseQQSettingsDraft } from "./qq-validation.js";
 import { parseTelegramSettingsDraft } from "./validation.js";

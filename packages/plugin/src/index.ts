@@ -191,8 +191,10 @@ export async function apply(ctx: Context, config: Config): Promise<void> {
     settingsCtx.settings.installSection(ctx, WECHAT_SETTINGS_NAMESPACE, WechatSettingsSchema, { allowedUserIds: config.wechatAllowedUserIds, identityLookupEnabled: config.wechatIdentityLookupEnabled }, { setSource: (current) => { wechatSource = current; }, onChange: scheduleWechat });
   });
 
-  const disposeWechatRpc = installWechatRpc(ctx, () => wechatControllers.get(ctx));
-  ctx.effect(() => disposeWechatRpc, "wechat connection rpc");
+  ctx.inject(["webServer"], (webCtx) => {
+    const disposeWechatRpc = installWechatRpc(webCtx, () => wechatControllers.get(ctx));
+    webCtx.effect(() => disposeWechatRpc, "wechat connection rpc");
+  });
 
   await ctx.effect(() => {
     active = true;

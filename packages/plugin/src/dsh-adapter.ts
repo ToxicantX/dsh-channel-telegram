@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type { Context } from "@deepseek-ai/cordis";
 import type { ImageMediaType } from "@deepseek-ai/dsh-attachment";
-import { installModelSelection, type Agent, type AgentHandle } from "@deepseek-ai/dsh-agent";
+import { installModelSelection, type Agent, type AgentHandle, type AssistantStreamFrame } from "@deepseek-ai/dsh-agent";
 import { agentPresetProjectionDefinition } from "@deepseek-ai/dsh-agent-presets";
 import type {} from "@deepseek-ai/dsh-agent-default-model";
 import { createUserMessage } from "@deepseek-ai/dsh-llm";
@@ -25,6 +25,7 @@ export class CorrelatedTurnCollector {
   private targetTurn?: number;
   private text = "";
   private readonly tools = new Map<string, string>();
+  private stream?: { attemptId: string; revision: number; turn: number; step: number };
 
   constructor(private readonly messageId: string, private readonly sessionId = "session") {}
 
@@ -38,9 +39,6 @@ export class CorrelatedTurnCollector {
       return this.targetTurn === undefined ? {} : { progress: { type: "turn-start", sessionId: this.sessionId, turn: this.targetTurn } };
     }
     if (this.targetTurn === undefined) return {};
-    if (event.type === "assistant/chunk" && event.data.turn === this.targetTurn && event.data.chunk.type === "text-delta" && event.data.chunk.text !== "") {
-      return { progress: { type: "assistant-delta", sessionId: this.sessionId, turn: this.targetTurn, step: event.data.step, text: event.data.chunk.text } };
-    }
     if (event.type === "assistant/message" && event.data.turn === this.targetTurn) {
       this.text = visibleText(event.data.message.content);
       return { progress: { type: "assistant-message", sessionId: this.sessionId, turn: this.targetTurn, step: event.data.step, text: this.text } };
@@ -60,6 +58,18 @@ export class CorrelatedTurnCollector {
     const result = { text: this.text || errorText(event.data.reason), reason: event.data.reason.kind, turn: event.data.turn } satisfies TurnResult;
     return { result, progress: { type: "turn-end", sessionId: this.sessionId, result } };
   }
+
+  acceptStream(frame: AssistantStreamFrame): CollectorUpdate {
+    if (frame.type === "start") {
+      this.stream = { attemptId: String(frame.attemptId), revision: frame.revision, turn: frame.turn, step: frame.step };
+      return {};
+    }
+    const stream = this.stream;
+    if (stream === undefined || String(frame.attemptId) !== stream.attemptId || frame.revision !== stream.revision) return {};
+    if (frame.type === "end") { this.stream = undefined; return {}; }
+    if (stream.turn !== this.targetTurn || frame.chunk.type !== "text-delta" || frame.chunk.text === "") return {};
+    return { progress: { type: "assistant-delta", sessionId: this.sessionId, turn: stream.turn, step: stream.step, text: frame.chunk.text } };
+  }
 }
 
 function visibleText(content: readonly { readonly type: string; readonly text?: string }[]): string {
@@ -78,6 +88,7 @@ export class ObservedTurnCollector {
   private ended = false;
   private text = "";
   private readonly tools = new Map<string, string>();
+  private stream?: { attemptId: string; revision: number; turn: number; step: number };
 
   constructor(private readonly sessionId: string) {}
 
@@ -95,12 +106,6 @@ export class ObservedTurnCollector {
     if (this.turn === undefined) return progress;
 
     switch (event.type) {
-      case "assistant/chunk":
-        if (event.data.turn === this.turn && event.data.chunk.type === "text-delta" && event.data.chunk.text !== "") {
-          this.text += event.data.chunk.text;
-          progress.push({ type: "assistant-delta", sessionId: this.sessionId, turn: this.turn, step: event.data.step, text: event.data.chunk.text });
-        }
-        break;
       case "assistant/message":
         if (event.data.turn === this.turn) {
           this.text = visibleText(event.data.message.content);
@@ -134,6 +139,23 @@ export class ObservedTurnCollector {
     return progress;
   }
 
+  acceptStream(frame: AssistantStreamFrame): readonly TurnProgress[] {
+    const progress: TurnProgress[] = [];
+    if (frame.type === "start") {
+      if (this.turn !== undefined && (frame.turn < this.turn || (frame.turn === this.turn && this.ended))) return progress;
+      if (this.turn === undefined || frame.turn > this.turn) this.begin(frame.turn, progress);
+      this.stream = { attemptId: String(frame.attemptId), revision: frame.revision, turn: frame.turn, step: frame.step };
+      return progress;
+    }
+    const stream = this.stream;
+    if (stream === undefined || String(frame.attemptId) !== stream.attemptId || frame.revision !== stream.revision) return progress;
+    if (frame.type === "end") { this.stream = undefined; return progress; }
+    if (stream.turn !== this.turn || this.ended || frame.chunk.type !== "text-delta" || frame.chunk.text === "") return progress;
+    this.text += frame.chunk.text;
+    progress.push({ type: "assistant-delta", sessionId: this.sessionId, turn: stream.turn, step: stream.step, text: frame.chunk.text });
+    return progress;
+  }
+
   collect(event: SessionEvent): readonly TurnProgress[] {
     return this.accept(event);
   }
@@ -143,6 +165,7 @@ export class ObservedTurnCollector {
     this.ended = false;
     this.text = "";
     this.tools.clear();
+    this.stream = undefined;
     progress.push({ type: "turn-start", sessionId: this.sessionId, turn });
   }
 }
@@ -231,12 +254,17 @@ export class DshAdapter implements DshPort {
       if (String(session.id) !== sessionId) return;
       for (const progress of collector.accept(event)) listener(progress);
     });
+    const unsubscribeStream = this.ctx.on("agent/assistant-stream", ({ agent, frame }) => {
+      if (String(agent.session.id) !== sessionId) return;
+      for (const progress of collector.acceptStream(frame)) listener(progress);
+    });
     let active = true;
     const dispose = (): void => {
       if (!active) return;
       active = false;
       this.watchers.delete(dispose);
       unsubscribe();
+      unsubscribeStream();
     };
     this.watchers.add(dispose);
     return dispose;
@@ -257,12 +285,19 @@ export class DshAdapter implements DshPort {
         settled = true;
         clearTimeout(timer);
         dispose();
+        disposeStream();
         resolve(update.result);
+      });
+      const disposeStream = this.ctx.on("agent/assistant-stream", ({ agent: source, frame }) => {
+        if (String(source.session.id) !== sessionId || settled) return;
+        const update = collector.acceptStream(frame);
+        if (update.progress !== undefined) onProgress?.(update.progress);
       });
       const timer = setTimeout(() => {
         if (settled) return;
         settled = true;
         dispose();
+        disposeStream();
         reject(new Error("Timed out waiting for session " + sessionId));
       }, this.options.turnTimeoutMs);
       try {
@@ -271,6 +306,7 @@ export class DshAdapter implements DshPort {
         settled = true;
         clearTimeout(timer);
         dispose();
+        disposeStream();
         reject(error);
       }
     });

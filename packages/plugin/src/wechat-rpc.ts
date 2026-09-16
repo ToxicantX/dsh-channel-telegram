@@ -4,7 +4,7 @@ import type { WechatLoginController, WechatLoginStatus } from "./wechat-controll
 export const WECHAT_RPC_CHANNEL = "/wechat";
 type RpcResult<T> = { ok: true; value: T } | { ok: false; error: { code: "internal"; message: string; details: Record<string, never> } };
 interface WechatHostConnection {
-  readonly rpc: { handle(channel: string, handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>, options: { authority: "trusted-host" | "loopback" }): () => Promise<void> };
+  readonly rpc: { handle(channel: string, handler: (endpoint: string, payload: unknown, signal: AbortSignal) => Promise<RpcResult<unknown>>): () => Promise<void> };
 }
 
 export function installWechatRpc(ctx: Context, controller: () => WechatLoginController | undefined): () => Promise<void> {
@@ -21,7 +21,7 @@ export function installWechatRpc(ctx: Context, controller: () => WechatLoginCont
         default: return failure("Unknown WeChat operation");
       }
     } catch (error) { return failure(error instanceof Error ? error.message : "WeChat operation failed"); }
-  }, { authority: "trusted-host" });
+  });
 }
 
 function success(value: WechatLoginStatus): RpcResult<unknown> { return { ok: true, value }; }
