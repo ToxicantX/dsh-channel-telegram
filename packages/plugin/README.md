@@ -1,14 +1,14 @@
 # dsh-channel-telegram
 
-Cordis Host composition plugin for Telegram, QQ, and experimental WeChat iLink channels. Version 0.5.1 is verified against DSH 0.1.6-alpha.1.
+Cordis Host composition plugin for Telegram, QQ, and experimental WeChat iLink channels. Version 0.5.2 is verified against DSH 0.1.6-alpha.2.
 
 Full configuration guides and sanitized DSH Web screenshots: [简体中文](https://github.com/ToxicantX/dsh-channel-telegram#readme) | [English](https://github.com/ToxicantX/dsh-channel-telegram/blob/main/README.en.md)
 
 ## Install
 
-The 0.5.1 release contains Telegram, QQ, experimental WeChat transport, and DSH 0.1.6-alpha.1 compatibility. Install the pinned package from the registry:
+The 0.5.2 release contains Telegram, QQ, experimental WeChat transport, and DSH 0.1.6-alpha.2 compatibility. Install the pinned package from the registry:
 
-    dsh plugin --profile web add dsh-channel-telegram@0.5.1
+    dsh plugin --profile web add dsh-channel-telegram@0.5.2
 
 For source-checkout verification, link the profile dependency to this package and rebuild the workspace. The DSH plugin manager installs a published package and adds its bundled composition patch to the profile. Restart the active DSH Web Host, then configure Telegram, QQ, and experimental WeChat under Settings > Plugins.
 

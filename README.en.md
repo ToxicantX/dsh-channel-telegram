@@ -2,13 +2,13 @@
 
 [简体中文](README.md) | [English](README.en.md)
 
-[![npm version](https://img.shields.io/npm/v/dsh-channel-telegram?label=npm)](https://www.npmjs.com/package/dsh-channel-telegram) [![npm downloads](https://img.shields.io/npm/dm/dsh-channel-telegram?label=downloads)](https://www.npmjs.com/package/dsh-channel-telegram) [![license](https://img.shields.io/badge/license-MIT-green)](https://www.npmjs.com/package/dsh-channel-telegram) [![GitHub stars](https://img.shields.io/github/stars/ToxicantX/dsh-channel-telegram)](https://github.com/ToxicantX/dsh-channel-telegram/stargazers) [![GitHub issues](https://img.shields.io/github/issues/ToxicantX/dsh-channel-telegram)](https://github.com/ToxicantX/dsh-channel-telegram/issues) [![Node.js >=22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](https://nodejs.org/) [![DSH 0.1.6-alpha.1](https://img.shields.io/badge/dsh-0.1.6--alpha.1-4caf50)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.1)
+[![npm version](https://img.shields.io/npm/v/dsh-channel-telegram?label=npm)](https://www.npmjs.com/package/dsh-channel-telegram) [![npm downloads](https://img.shields.io/npm/dm/dsh-channel-telegram?label=downloads)](https://www.npmjs.com/package/dsh-channel-telegram) [![license](https://img.shields.io/badge/license-MIT-green)](https://www.npmjs.com/package/dsh-channel-telegram) [![GitHub stars](https://img.shields.io/github/stars/ToxicantX/dsh-channel-telegram)](https://github.com/ToxicantX/dsh-channel-telegram/stargazers) [![GitHub issues](https://img.shields.io/github/issues/ToxicantX/dsh-channel-telegram)](https://github.com/ToxicantX/dsh-channel-telegram/issues) [![Node.js >=22](https://img.shields.io/badge/node-%3E%3D22-339933?logo=node.js&logoColor=white)](https://nodejs.org/) [![DSH 0.1.6-alpha.2](https://img.shields.io/badge/dsh-0.1.6--alpha.2-4caf50)](https://github.com/deepseek-ai/deepseek-harness/releases/tag/dsh-v0.1.6-alpha.2)
 
 `dsh-channel-telegram` connects a DeepSeek Harness Host to Telegram private chats, QQ Official Bot C2C messages, and WeChat iLink private chats. All three channels share the same authenticated DSH control plane for host, project, and session selection.
 
-Version `0.5.1` includes:
+Version `0.5.2` includes:
 
-- Compatibility with the DSH `0.1.6-alpha.1` Host, settings, credential, Remote, and Client APIs (including process-local assistant streaming).
+- Compatibility with the DSH `0.1.6-alpha.2` Host, settings, credential, Remote, and Client APIs (including process-local assistant streaming).
 - Telegram inline menus, progress-message editing, and inbound images/text files.
 - QQ native C2C keyboards, interaction callbacks, and a numbered-text fallback.
 - A DSH-native WeChat transport adapted from Tencent's MIT-licensed `@tencent-weixin/openclaw-weixin@2.4.6` transport, with inbound images and text files.
@@ -18,7 +18,7 @@ Version `0.5.1` includes:
 ## Requirements
 
 - Node.js 22 or newer.
-- DeepSeek Harness `0.1.6-alpha.1` (explicit alpha install; the npm `latest` tag may point to an older release).
+- DeepSeek Harness `0.1.6-alpha.2` (explicit alpha install; the npm `latest` tag may point to an older release).
 - One or more channel accounts:
   - Telegram Bot Token.
   - QQ Official Bot AppID and AppSecret.
@@ -29,7 +29,7 @@ Version `0.5.1` includes:
 Install the published Host plugin into the `web` profile:
 
 ```bash
-dsh plugin --profile web add dsh-channel-telegram@0.5.1
+dsh plugin --profile web add dsh-channel-telegram@0.5.2
 ```
 
 Restart the active DSH Web Host or the desktop application after installation. Open **Settings → Plugins** to configure each channel. To upgrade, install the desired pinned version with the same command, restart DSH, and confirm the installed version in the plugin list. Credentials remain in DSH credential storage instead of the repository or composition file.
@@ -38,7 +38,7 @@ Published packages:
 
 | Package | Version | Purpose |
 | --- | --- | --- |
-| `dsh-channel-telegram` | `0.5.1` | DSH Host plugin and Web settings cards |
+| `dsh-channel-telegram` | `0.5.2` | DSH Host plugin and Web settings cards |
 | `@wsxcant/dsh-channel-telegram-gateway` | `0.3.1` | Shared menus, routing, and session relay |
 | `@wsxcant/dsh-channel-qq` | `0.2.1` | QQ Official Bot C2C transport |
 | `@wsxcant/dsh-channel-wechat` | `0.1.1` | WeChat iLink private-chat transport |
